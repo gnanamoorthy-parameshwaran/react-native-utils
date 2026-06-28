@@ -1,4 +1,4 @@
-export class DateUtils {
+export default class DateUtils {
   /**
    * Formats a given date object or ISO string to the specified format.
    * Default format: YYYY-MM-DD

@@ -5,15 +5,21 @@ class ArrayUtils {
    * @param property The property to group by.
    * @returns An object where the keys are the property values, and the values are arrays of objects with that property.
    */
-  static groupBy<T extends Record<string, any>>(array: T[], property: keyof T): Record<string, T[]> {
-    return array.reduce((result, item) => {
-      const key = item[property] as string;
-      if (!result[key]) {
-        result[key] = [];
-      }
-      result[key].push(item);
-      return result;
-    }, {} as Record<string, T[]>);
+  static groupBy<T extends Record<string, any>>(
+    array: T[],
+    property: keyof T
+  ): Record<string, T[]> {
+    return array.reduce(
+      (result, item) => {
+        const key = item[property] as string;
+        if (!result[key]) {
+          result[key] = [];
+        }
+        result[key].push(item);
+        return result;
+      },
+      {} as Record<string, T[]>
+    );
   }
 
   /**
@@ -32,7 +38,7 @@ class ArrayUtils {
    * @returns An array containing elements present in both arrays.
    */
   static intersection<T>(array1: T[], array2: T[]): T[] {
-    return array1.filter(item => array2.includes(item));
+    return array1.filter((item) => array2.includes(item));
   }
 
   /**
@@ -51,9 +57,9 @@ class ArrayUtils {
    */
   static shuffle<T>(array: T[]): T[] {
     return array
-      .map(value => ({value, sortKey: Math.random()}))
+      .map((value) => ({ value, sortKey: Math.random() }))
       .sort((a, b) => a.sortKey - b.sortKey)
-      .map(({value}) => value);
+      .map(({ value }) => value);
   }
 
   static groupByDate<T extends Record<string, any>>(
@@ -64,13 +70,13 @@ class ArrayUtils {
       useFormattedDate?: boolean;
       locale?: string;
       dateOptions?: Intl.DateTimeFormatOptions;
-    },
-  ): {title: string; data: T[]}[] {
+    }
+  ): { title: string; data: T[] }[] {
     const {
       order = 'asc',
       useFormattedDate = false,
       locale = 'en-US',
-      dateOptions = {year: 'numeric', month: 'short', day: 'numeric'},
+      dateOptions = { year: 'numeric', month: 'short', day: 'numeric' },
     } = options || {};
 
     const formatter = new Intl.DateTimeFormat(locale, dateOptions);
@@ -81,18 +87,23 @@ class ArrayUtils {
       return order === 'asc' ? aTime - bTime : bTime - aTime;
     });
 
-    const grouped = sorted.reduce((acc, item) => {
-      const dateObj = new Date(item[dateField] as string);
-      const dateKey = useFormattedDate ? formatter.format(dateObj) : dateObj.toISOString().split('T')[0];
+    const grouped = sorted.reduce(
+      (acc, item) => {
+        const dateObj = new Date(item[dateField] as string);
+        const dateKey = useFormattedDate
+          ? formatter.format(dateObj)
+          : (dateObj.toISOString().split('T')[0] ?? dateObj.toISOString());
 
-      if (!acc[dateKey]) {
-        acc[dateKey] = [];
-      }
-      acc[dateKey].push(item);
-      return acc;
-    }, {} as Record<string, T[]>);
+        if (!acc[dateKey]) {
+          acc[dateKey] = [];
+        }
+        acc[dateKey].push(item);
+        return acc;
+      },
+      {} as Record<string, T[]>
+    );
 
-    return Object.entries(grouped).map(([title, data]) => ({title, data}));
+    return Object.entries(grouped).map(([title, data]) => ({ title, data }));
   }
 }
 

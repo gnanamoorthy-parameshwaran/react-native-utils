@@ -3,10 +3,13 @@ export class DateUtils {
    * Formats a given date object or ISO string to the specified format.
    * Default format: YYYY-MM-DD
    */
-  static formatDate(date: Date | string, format: string = 'YYYY-MM-DD'): string {
+  static formatDate(
+    date: Date | string,
+    format: string = 'YYYY-MM-DD'
+  ): string {
     const d = typeof date === 'string' ? new Date(date) : date;
 
-    const map: {[key: string]: string} = {
+    const map: { [key: string]: string } = {
       YYYY: d.getFullYear().toString(),
       MM: String(d.getMonth() + 1).padStart(2, '0'),
       DD: String(d.getDate()).padStart(2, '0'),
@@ -15,7 +18,10 @@ export class DateUtils {
       ss: String(d.getSeconds()).padStart(2, '0'),
     };
 
-    return format.replace(/YYYY|MM|DD|HH|mm|ss/g, match => map[match]);
+    return format.replace(
+      /YYYY|MM|DD|HH|mm|ss/g,
+      (match) => map[match] ?? match
+    );
   }
 
   /**
@@ -25,7 +31,7 @@ export class DateUtils {
   static getDateDifference(
     date1: Date | string,
     date2: Date | string,
-    unit: 'days' | 'hours' | 'minutes' | 'seconds' = 'days',
+    unit: 'days' | 'hours' | 'minutes' | 'seconds' = 'days'
   ): number {
     const d1 = new Date(date1).getTime();
     const d2 = new Date(date2).getTime();
@@ -52,7 +58,9 @@ export class DateUtils {
     const d = new Date(date);
     const today = new Date();
     return (
-      d.getFullYear() === today.getFullYear() && d.getMonth() === today.getMonth() && d.getDate() === today.getDate()
+      d.getFullYear() === today.getFullYear() &&
+      d.getMonth() === today.getMonth() &&
+      d.getDate() === today.getDate()
     );
   }
 
@@ -60,7 +68,11 @@ export class DateUtils {
    * Adds or subtracts the specified amount of time to/from a given date.
    * Supported units: days, hours, minutes, seconds
    */
-  static addTime(date: Date | string, amount: number, unit: 'days' | 'hours' | 'minutes' | 'seconds'): Date {
+  static addTime(
+    date: Date | string,
+    amount: number,
+    unit: 'days' | 'hours' | 'minutes' | 'seconds'
+  ): Date {
     const d = new Date(date);
     switch (unit) {
       case 'days':
@@ -84,7 +96,11 @@ export class DateUtils {
   /**
    * Checks if a date falls within a specific range.
    */
-  static isDateInRange(date: Date | string, start: Date | string, end: Date | string): boolean {
+  static isDateInRange(
+    date: Date | string,
+    start: Date | string,
+    end: Date | string
+  ): boolean {
     const d = new Date(date).getTime();
     const s = new Date(start).getTime();
     const e = new Date(end).getTime();
@@ -103,7 +119,9 @@ export class DateUtils {
     yesterday.setDate(today.getDate() - 1);
 
     const isSameDay = (a: Date, b: Date) =>
-      a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+      a.getFullYear() === b.getFullYear() &&
+      a.getMonth() === b.getMonth() &&
+      a.getDate() === b.getDate();
 
     if (isSameDay(d, today)) {
       return 'Today';
@@ -156,7 +174,9 @@ export class DateUtils {
 
     const diffInMinutes = Math.floor(diffInSeconds / 60);
     if (diffInMinutes < 60) {
-      return diffInMinutes === 1 ? '1 minute ago' : `${diffInMinutes} minutes ago`;
+      return diffInMinutes === 1
+        ? '1 minute ago'
+        : `${diffInMinutes} minutes ago`;
     }
 
     const diffInHours = Math.floor(diffInMinutes / 60);
@@ -185,7 +205,10 @@ export class DateUtils {
       return diffInDays === 1 ? '1 day ago' : `${diffInDays} days ago`;
     }
 
-    const diffInMonths = now.getFullYear() * 12 + now.getMonth() - (d.getFullYear() * 12 + d.getMonth());
+    const diffInMonths =
+      now.getFullYear() * 12 +
+      now.getMonth() -
+      (d.getFullYear() * 12 + d.getMonth());
     if (diffInMonths < 12) {
       return diffInMonths === 1 ? '1 month ago' : `${diffInMonths} months ago`;
     }

@@ -1,10 +1,14 @@
-import {useCallback} from 'react';
-import {translate} from '../../Translations';
+import { useCallback } from 'react';
 
-export default function useTranslation() {
-  const t = useCallback((key: string, params?: Record<string, any>) => {
-    return translate(key, params);
-  }, []);
+type TranslateFn = (key: string, params?: Record<string, unknown>) => string;
 
-  return {t};
+export default function useTranslation(translate: TranslateFn) {
+  const t = useCallback(
+    (key: string, params?: Record<string, unknown>) => {
+      return translate(key, params);
+    },
+    [translate]
+  );
+
+  return { t };
 }

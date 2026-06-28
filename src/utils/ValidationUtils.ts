@@ -8,7 +8,8 @@ class ValidationUtils {
   }
 
   DateEquals(field: string, compare: string, value: any) {
-    const isValid = new Date(value).toISOString() === new Date(compare).toISOString();
+    const isValid =
+      new Date(value).toISOString() === new Date(compare).toISOString();
     return {
       isValid,
       message: isValid ? null : `The ${field} must be equal to ${compare}`,
@@ -32,7 +33,9 @@ class ValidationUtils {
     const isValid = regex ? regex.test(value) : true;
     return {
       isValid,
-      message: isValid ? null : `The ${field} does not match the format ${format}`,
+      message: isValid
+        ? null
+        : `The ${field} does not match the format ${format}`,
     };
   }
 
@@ -48,7 +51,9 @@ class ValidationUtils {
     const isValid = new Date(value) >= new Date(compare);
     return {
       isValid,
-      message: isValid ? null : `The ${field} must be after or equal to ${compare}`,
+      message: isValid
+        ? null
+        : `The ${field} must be after or equal to ${compare}`,
     };
   }
 
@@ -64,7 +69,9 @@ class ValidationUtils {
     const isValid = new Date(value) <= new Date(compare);
     return {
       isValid,
-      message: isValid ? null : `The ${field} must be before or equal to ${compare}`,
+      message: isValid
+        ? null
+        : `The ${field} must be before or equal to ${compare}`,
     };
   }
 
@@ -72,7 +79,9 @@ class ValidationUtils {
     const isValid = value !== (fields ? fields[compareField] : compareField);
     return {
       isValid,
-      message: isValid ? null : `The ${field} must be different from ${compareField}`,
+      message: isValid
+        ? null
+        : `The ${field} must be different from ${compareField}`,
     };
   }
 
@@ -88,20 +97,25 @@ class ValidationUtils {
     const isValid = values.includes(String(value));
     return {
       isValid,
-      message: isValid ? null : `The ${field} must be one of: ${values.join(', ')}`,
+      message: isValid
+        ? null
+        : `The ${field} must be one of: ${values.join(', ')}`,
     };
   }
   Required(field: string, value: any) {
     const isValid =
-      value !== undefined && value !== null && !(typeof value === 'string' && value.trim() === '') && !(Array.isArray(value) && value.length === 0);
+      value !== undefined &&
+      value !== null &&
+      !(typeof value === 'string' && value.trim() === '') &&
+      !(Array.isArray(value) && value.length === 0);
     return {
       isValid,
       message: isValid ? null : `${field} is required`,
     };
   }
 
-  Nullable(field: string, value: any) {
-    return {isValid: true, message: null};
+  Nullable(_field: string, _value: any) {
+    return { isValid: true, message: null };
   }
 
   String(field: string, value: any) {
@@ -113,7 +127,8 @@ class ValidationUtils {
   }
 
   Numeric(field: string, value: any) {
-    const isValid = typeof value === 'number' || (!isNaN(Number(value)) && value !== '');
+    const isValid =
+      typeof value === 'number' || (!isNaN(Number(value)) && value !== '');
     return {
       isValid,
       message: isValid ? null : `${field} must be a number`,
@@ -143,7 +158,9 @@ class ValidationUtils {
     else if (Array.isArray(value)) isValid = value.length >= limit;
     return {
       isValid,
-      message: isValid ? null : `The ${field} must be at least ${limit}${typeof value === 'number' ? '' : ' characters'}`,
+      message: isValid
+        ? null
+        : `The ${field} must be at least ${limit}${typeof value === 'number' ? '' : ' characters'}`,
     };
   }
 
@@ -154,7 +171,9 @@ class ValidationUtils {
     else if (Array.isArray(value)) isValid = value.length <= limit;
     return {
       isValid,
-      message: isValid ? null : `The ${field} may not be greater than ${limit}${typeof value === 'number' ? '' : ' characters'}`,
+      message: isValid
+        ? null
+        : `The ${field} may not be greater than ${limit}${typeof value === 'number' ? '' : ' characters'}`,
     };
   }
 
@@ -165,7 +184,9 @@ class ValidationUtils {
     else if (Array.isArray(value)) isValid = value.length === limit;
     return {
       isValid,
-      message: isValid ? null : `The ${field} must be exactly ${limit}${typeof value === 'number' ? '' : ' characters'}`,
+      message: isValid
+        ? null
+        : `The ${field} must be exactly ${limit}${typeof value === 'number' ? '' : ' characters'}`,
     };
   }
 
@@ -188,35 +209,35 @@ class ValidationUtils {
       if (rule === 'email') return this.Email(field, value);
       if (rule === 'date') return this.Date(field, value);
       if (rule.startsWith('date_equals:')) {
-        const compare = rule.split(':')[1];
+        const compare = rule.split(':')[1] ?? '';
         return this.DateEquals(field, compare, value);
       }
       if (rule.startsWith('date_format:')) {
-        const format = rule.split(':')[1];
+        const format = rule.split(':')[1] ?? '';
         return this.DateFormat(field, format, value);
       }
       if (rule.startsWith('after:')) {
-        const compare = rule.split(':')[1];
+        const compare = rule.split(':')[1] ?? '';
         return this.After(field, compare, value);
       }
       if (rule.startsWith('after_or_equal:')) {
-        const compare = rule.split(':')[1];
+        const compare = rule.split(':')[1] ?? '';
         return this.AfterOrEqual(field, compare, value);
       }
       if (rule.startsWith('before:')) {
-        const compare = rule.split(':')[1];
+        const compare = rule.split(':')[1] ?? '';
         return this.Before(field, compare, value);
       }
       if (rule.startsWith('before_or_equal:')) {
-        const compare = rule.split(':')[1];
+        const compare = rule.split(':')[1] ?? '';
         return this.BeforeOrEqual(field, compare, value);
       }
       if (rule.startsWith('different:')) {
-        const compareField = rule.split(':')[1];
+        const compareField = rule.split(':')[1] ?? '';
         return this.Different(field, compareField, value, fields);
       }
       if (rule.startsWith('timezone:')) {
-        const tz = rule.split(':')[1];
+        const tz = rule.split(':')[1] ?? '';
         return this.Timezone(field, tz, value);
       }
       if (rule.startsWith('min:')) {
@@ -232,16 +253,22 @@ class ValidationUtils {
         return this.Exact(field, limit, value);
       }
       if (rule.startsWith('between:')) {
-        const [min, max] = rule.split(':')[1].split(',').map(Number);
-        return this.Min(field, min, value).isValid && this.Max(field, max, value).isValid
-          ? {isValid: true, message: null}
-          : {isValid: false, message: `The ${field} must be between ${min} and ${max}`};
+        const parts = (rule.split(':')[1] ?? '').split(',').map(Number);
+        const min = parts[0] ?? 0;
+        const max = parts[1] ?? 0;
+        return this.Min(field, min, value).isValid &&
+          this.Max(field, max, value).isValid
+          ? { isValid: true, message: null }
+          : {
+              isValid: false,
+              message: `The ${field} must be between ${min} and ${max}`,
+            };
       }
       if (rule.startsWith('in:')) {
         const values = rule.substring(3).split(',');
         return this.In(field, values, value);
       }
-      return {isValid: true, message: null};
+      return { isValid: true, message: null };
     }
     return {
       isValid: true,
@@ -251,7 +278,15 @@ class ValidationUtils {
 }
 
 // Base validation rules without parameters
-export type BaseRule = 'required' | 'email' | 'numeric' | 'boolean' | 'nullable' | 'string' | 'array' | 'date';
+export type BaseRule =
+  | 'required'
+  | 'email'
+  | 'numeric'
+  | 'boolean'
+  | 'nullable'
+  | 'string'
+  | 'array'
+  | 'date';
 
 // Rules that require parameters
 export type ParameterizedRule =

@@ -2,11 +2,23 @@ import React from 'react';
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-import Constant from '@utils/Constant';
+export type ResponseFailedType = {
+  success: false;
+  message: string;
+  errors?: Record<string, string[]>;
+};
 
-import type {ResponseFailedType} from '@apptypes/index';
+export type APIConfig = {
+  apiUrl: string;
+  apiKey: string;
+  storageKeys?: {
+    authToken?: string;
+    language?: string;
+  };
+};
 
 export type useAPIType = {
+  config: APIConfig;
   initialLoaders?: {
     getting?: boolean;
     patching?: boolean;
@@ -35,6 +47,7 @@ export type FetchProps = {
  * @returns An object containing the API call methods and loading states
  */
 export default function useAPI({
+  config,
   initialLoaders = {
     getting: false,
     patching: false,
@@ -43,106 +56,125 @@ export default function useAPI({
     posting: false,
   },
   OnInitialize,
-}: useAPIType = {}) {
+}: useAPIType) {
   const [state, setState] = React.useState(initialLoaders);
 
   async function Get<T>(options: FetchProps): Promise<T | ResponseFailedType> {
-    setState(prev => ({...prev, getting: true}));
+    setState((prev) => ({ ...prev, getting: true }));
     try {
-      return await Fetch({...options, method: 'GET'});
+      return await Fetch(config, { ...options, method: 'GET' });
     } finally {
-      setState(prev => ({...prev, getting: false}));
+      setState((prev) => ({ ...prev, getting: false }));
     }
   }
 
   async function Post<T>(options: FetchProps): Promise<T | ResponseFailedType> {
-    setState(prev => ({...prev, posting: true}));
+    setState((prev) => ({ ...prev, posting: true }));
     try {
-      return await Fetch({...options, method: 'POST'});
+      return await Fetch(config, { ...options, method: 'POST' });
     } finally {
-      setState(prev => ({...prev, posting: false}));
+      setState((prev) => ({ ...prev, posting: false }));
     }
   }
 
   async function Put<T>(options: FetchProps): Promise<T | ResponseFailedType> {
-    setState(prev => ({...prev, putting: true}));
+    setState((prev) => ({ ...prev, putting: true }));
     try {
-      return await Fetch({...options, method: 'PUT'});
+      return await Fetch(config, { ...options, method: 'PUT' });
     } finally {
-      setState(prev => ({...prev, putting: false}));
+      setState((prev) => ({ ...prev, putting: false }));
     }
   }
 
-  async function Patch<T>(options: FetchProps): Promise<T | ResponseFailedType> {
-    setState(prev => ({...prev, patching: true}));
+  async function Patch<T>(
+    options: FetchProps
+  ): Promise<T | ResponseFailedType> {
+    setState((prev) => ({ ...prev, patching: true }));
     try {
-      return await Fetch({...options, method: 'PATCH'});
+      return await Fetch(config, { ...options, method: 'PATCH' });
     } finally {
-      setState(prev => ({...prev, patching: false}));
+      setState((prev) => ({ ...prev, patching: false }));
     }
   }
 
-  async function Delete<T>(options: FetchProps): Promise<T | ResponseFailedType> {
-    setState(prev => ({...prev, deleting: true}));
+  async function Delete<T>(
+    options: FetchProps
+  ): Promise<T | ResponseFailedType> {
+    setState((prev) => ({ ...prev, deleting: true }));
     try {
-      return await Fetch({...options, method: 'DELETE'});
+      return await Fetch(config, { ...options, method: 'DELETE' });
     } finally {
-      setState(prev => ({...prev, deleting: false}));
+      setState((prev) => ({ ...prev, deleting: false }));
     }
   }
 
   React.useEffect(() => {
-    OnInitialize && OnInitialize();
-  }, []);
+    OnInitialize?.();
+  }, [OnInitialize]);
 
-  return {...state, Get, Post, Put, Patch, Delete, GetCacheKey, InvalidateCache};
+  return {
+    ...state,
+    Get,
+    Post,
+    Put,
+    Patch,
+    Delete,
+    GetCacheKey: (opts: { method: string; endpoint: string }) =>
+      GetCacheKey(config, opts),
+    InvalidateCache,
+  };
 }
 
 async function InvalidateCache(key: string) {
   await AsyncStorage.removeItem(key);
 }
 
-function GetAuthorizationString(token: string) {
-  return 'Bearer ' + token;
+function GetCacheKey(
+  config: APIConfig,
+  { method, endpoint }: { method: string; endpoint: string }
+) {
+  return `${method}:${config.apiUrl + endpoint}`;
 }
 
-function GetCacheKey({method, endpoint}: {method: string; endpoint: string}) {
-  return `${method}:${Constant.API_URL + endpoint}`;
-}
+async function Fetch(config: APIConfig, options: FetchProps) {
+  const authTokenKey = config.storageKeys?.authToken ?? 'auth_token';
+  const languageKey = config.storageKeys?.language ?? 'language';
 
-async function Fetch(options: FetchProps) {
   const headers = options.headers || new Headers();
-  const authorization = await AsyncStorage.getItem(Constant.LOCAL_STORAGE.AUTH_TOKEN);
-  const Language = await AsyncStorage.getItem(Constant.LOCAL_STORAGE.LANGUAGE);
-  authorization && headers.append('Authorization', GetAuthorizationString(authorization));
-  headers.append('x-api-key', Constant.API_KEY);
+  const authorization = await AsyncStorage.getItem(authTokenKey);
+  const language = await AsyncStorage.getItem(languageKey);
+  if (authorization) {
+    headers.append('Authorization', 'Bearer ' + authorization);
+  }
+  headers.append('x-api-key', config.apiKey);
   headers.append('Accept', 'application/json');
-  headers.append('Accept-Language', Language || 'ta');
+  headers.append('Accept-Language', language ?? 'ta');
 
-  /**
-   * Get Cached response
-   */
   if (options.cacheConfig?.key) {
-    const cachedResponse = await AsyncStorage.getItem(options.cacheConfig?.key);
+    const cachedResponse = await AsyncStorage.getItem(options.cacheConfig.key);
     if (cachedResponse) {
       const cachedResult = JSON.parse(cachedResponse);
-      if (cachedResult && cachedResult?.expiry && cachedResult.expiry < new Date().getTime()) {
-        await AsyncStorage.removeItem(options.cacheConfig?.key);
+      if (
+        cachedResult &&
+        cachedResult?.expiry &&
+        cachedResult.expiry < new Date().getTime()
+      ) {
+        await AsyncStorage.removeItem(options.cacheConfig.key);
       } else {
         return cachedResult.result;
       }
     }
   }
 
-  /**
-   * Get network request
-   */
   const requestOptions = {
     method: options.method,
     headers: headers,
     body: options.body,
   };
-  const response = await fetch(Constant.API_URL + options.endpoint, requestOptions);
+  const response = await fetch(
+    config.apiUrl + options.endpoint,
+    requestOptions
+  );
   const result = await response.json();
 
   if (response.ok && options.cacheConfig?.enabled) {
@@ -151,7 +183,10 @@ async function Fetch(options: FetchProps) {
         result: result,
         expiry: new Date().getTime() + options.cacheConfig.timeout,
       };
-      await AsyncStorage.setItem(options.cacheConfig.key, JSON.stringify(cacheStore));
+      await AsyncStorage.setItem(
+        options.cacheConfig.key,
+        JSON.stringify(cacheStore)
+      );
     }
   }
 

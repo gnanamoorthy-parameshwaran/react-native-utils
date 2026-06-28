@@ -1,21 +1,27 @@
 import React from 'react';
-import {TextInput} from 'react-native';
-import {TextInput as PaperTextInput} from 'react-native-paper';
+import { TextInput } from 'react-native';
+import { TextInput as PaperTextInput } from 'react-native-paper';
 import * as ImagePicker from 'expo-image-picker';
-import {Picker} from '@react-native-picker/picker';
-import {DocumentPickerOptions, getDocumentAsync} from 'expo-document-picker';
+import { Picker } from '@react-native-picker/picker';
+import { getDocumentAsync } from 'expo-document-picker';
+import type { DocumentPickerOptions } from 'expo-document-picker';
 
 import StringUtils from '@utils/StringUtils';
-import ValidationUtils, {Rule} from '@utils/ValidationUtils';
+import ValidationUtils from '@utils/ValidationUtils';
+import type { Rule } from '@utils/ValidationUtils';
 
-type Rules<T> = {[K in keyof T]: Rule[]};
+type Rules<T> = { [K in keyof T]: Rule[] };
 
-type FormErrors<T> = {[K in keyof T]: string | null};
+type FormErrors<T> = { [K in keyof T]: string | null };
 
 // More specific ref types that cover common form components
-type FormRefTypes = React.ComponentRef<typeof TextInput> | React.ComponentRef<typeof PaperTextInput> | React.ComponentRef<typeof Picker> | null;
+type FormRefTypes =
+  | React.ComponentRef<typeof TextInput>
+  | React.ComponentRef<typeof PaperTextInput>
+  | React.ComponentRef<typeof Picker>
+  | null;
 
-type FormRefs<T> = {[K in keyof T]: FormRefTypes};
+type FormRefs<T> = { [K in keyof T]: FormRefTypes };
 
 type ExtractFieldRules<R extends Rule[]> = R[number];
 
@@ -55,7 +61,9 @@ export default function useForm<T extends Record<string, any>>({
    * @param fields The initial fields to create refs for
    * @returns A mapping of field names to their refs
    */
-  const InitializeRefs = <T extends Record<string, any>>(fields: T): FormRefs<T> => {
+  const InitializeRefs = <T extends Record<string, any>>(
+    fields: T
+  ): FormRefs<T> => {
     return Object.keys(fields).reduce((acc, key) => {
       acc[key as keyof T] = null;
       return acc;
@@ -76,7 +84,7 @@ export default function useForm<T extends Record<string, any>>({
    * @param value The new value of the field
    */
   const HandleFieldChange = (key: keyof T, value: any) => {
-    setFields(prev => ({
+    setFields((prev) => ({
       ...prev,
       [key]: value,
     }));
@@ -89,11 +97,16 @@ export default function useForm<T extends Record<string, any>>({
    * @param result Validation result
    * @returns Error message or null
    */
-  const getErrorMessage = (field: keyof T, rule: Rule, result: {isValid: boolean; message: string | null}) => {
+  const getErrorMessage = (
+    field: keyof T,
+    rule: Rule,
+    result: { isValid: boolean; message: string | null }
+  ) => {
     if (result.isValid) return null;
 
     // Use custom message if provided
-    const customMessage = messages?.[field]?.[rule as ExtractFieldRules<Rules<T>[keyof T]>];
+    const customMessage =
+      messages?.[field]?.[rule as ExtractFieldRules<Rules<T>[keyof T]>];
     if (customMessage) return customMessage;
 
     // Use default validation message
@@ -107,9 +120,13 @@ export default function useForm<T extends Record<string, any>>({
    */
   const ValidateField = (field: keyof T) => {
     if (rules && field in rules) {
-      const isValid = rules[field].every(rule => {
-        const result = Validator.Validate(String(field), rule, fields?.[field] ?? '');
-        setErrors(prev => ({
+      const isValid = rules[field].every((rule) => {
+        const result = Validator.Validate(
+          String(field),
+          rule,
+          fields?.[field] ?? ''
+        );
+        setErrors((prev) => ({
           ...prev,
           [field]: getErrorMessage(field, rule, result),
         }));
@@ -124,7 +141,7 @@ export default function useForm<T extends Record<string, any>>({
    * Method that validates all fields and calls OnSubmit if all are valid
    */
   const HandleSubmit = () => {
-    const isValid = Object.keys(fields).map(field => {
+    const isValid = Object.keys(fields).map((field) => {
       const fieldKey = field as keyof T;
       if (rules && fieldKey in rules) {
         return ValidateField(fieldKey);
@@ -132,7 +149,7 @@ export default function useForm<T extends Record<string, any>>({
       return true;
     });
 
-    if (isValid.every(item => item)) OnSubmit();
+    if (isValid.every((item) => item)) OnSubmit();
   };
 
   /**
@@ -141,14 +158,15 @@ export default function useForm<T extends Record<string, any>>({
    * @param pickOptions Options for the document picker
    */
   const PickDocument = (field: keyof T, pickOptions: DocumentPickerOptions) => {
-    getDocumentAsync(pickOptions).then(document => {
-      if (document.assets && document.assets?.length > 0) {
-        setFields(prev => ({
+    getDocumentAsync(pickOptions).then((document) => {
+      const asset = document.assets?.[0];
+      if (asset) {
+        setFields((prev) => ({
           ...prev,
           [field]: {
-            uri: document.assets[0].uri,
-            type: document.assets[0].mimeType,
-            name: document.assets[0].name,
+            uri: asset.uri,
+            type: asset.mimeType,
+            name: asset.name,
           },
         }));
       }
@@ -160,15 +178,19 @@ export default function useForm<T extends Record<string, any>>({
    * @param field The field to update with the picked image
    * @param options Options for the image picker
    */
-  const PickImage = (field: keyof T, options: ImagePicker.ImagePickerOptions) => {
-    ImagePicker.launchImageLibraryAsync(options).then(document => {
-      if (!document.canceled && document.assets && document.assets.length > 0) {
-        setFields(prev => ({
+  const PickImage = (
+    field: keyof T,
+    options: ImagePicker.ImagePickerOptions
+  ) => {
+    ImagePicker.launchImageLibraryAsync(options).then((document) => {
+      const asset = document.assets?.[0];
+      if (!document.canceled && asset) {
+        setFields((prev) => ({
           ...prev,
           [field]: {
-            uri: document.assets[0].uri,
-            type: document.assets[0].mimeType,
-            name: document.assets[0].fileName ?? 'image.jpg',
+            uri: asset.uri,
+            type: asset.mimeType,
+            name: asset.fileName ?? 'image.jpg',
           },
         }));
       }
@@ -176,11 +198,11 @@ export default function useForm<T extends Record<string, any>>({
   };
 
   React.useEffect(() => {
-    setFields(prev => ({
+    setFields((prev) => ({
       ...prev,
       ...initialFields,
     }));
-  }, [JSON.stringify(initialFields)]);
+  }, [initialFields]);
 
   return {
     refs,

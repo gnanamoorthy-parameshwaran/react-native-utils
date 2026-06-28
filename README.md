@@ -4,14 +4,11 @@ Used to store the common utilities for react native app
 
 ## Installation
 
-
 ```sh
 npm install react-native-utils
 ```
 
-
 ## Usage
-
 
 ```js
 import { multiply } from 'react-native-utils';
@@ -20,7 +17,6 @@ import { multiply } from 'react-native-utils';
 
 const result = await multiply(3, 7);
 ```
-
 
 ## Contributing
 

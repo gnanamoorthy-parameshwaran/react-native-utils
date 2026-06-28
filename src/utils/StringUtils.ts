@@ -2,7 +2,10 @@ class StringUtils {
   // Convert string to title case
   static toTitleCase(str: string): string {
     if (!str) return '';
-    return str.replace(/\w\S*/g, word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase());
+    return str.replace(
+      /\w\S*/g,
+      (word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+    );
   }
 
   // Check if a string is a palindrome
@@ -13,7 +16,11 @@ class StringUtils {
   }
 
   // Truncate string to a specific length and append ellipsis
-  static truncate(str: string, maxLength: number, ellipsis: string = '...'): string {
+  static truncate(
+    str: string,
+    maxLength: number,
+    ellipsis: string = '...'
+  ): string {
     if (!str || str.length <= maxLength) return str;
     return str.slice(0, maxLength) + ellipsis;
   }
@@ -61,14 +68,16 @@ class StringUtils {
     if (!input) return '';
 
     // Split camelCase into separate words and make them lowercase
-    const spacedString = input.replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase();
+    const spacedString = input
+      .replace(/([a-z])([A-Z])/g, '$1 $2')
+      .toLowerCase();
 
     // Capitalize the first letter of the entire string
     return spacedString.charAt(0).toUpperCase() + spacedString.slice(1) + '.';
   }
 
   static generateUUID = (): string => {
-    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, char => {
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (char) => {
       const random = (Math.random() * 16) | 0; // Generate a random number between 0 and 15
       const value = char === 'x' ? random : (random & 0x3) | 0x8; // Apply variant bit for 'y'
       return value.toString(16); // Convert to hexadecimal

@@ -1,5 +1,6 @@
 import createAPI from './client';
 
+export { getCacheKey } from './util';
 export * from './exceptions';
 
 export * from './context/APIContext';

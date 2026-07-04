@@ -6,7 +6,9 @@
     "start": "expo start",
     "android": "expo start --android",
     "ios": "expo start --ios",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "serve:openapi": "node scripts/serve-openapi.js",
+    "generate:api": "node ../lib/cli/scripts/cli.js generate-client --config ./client-generator.config.json"
   },
   "dependencies": {
     "@expo/metro-runtime": "~5.0.4",

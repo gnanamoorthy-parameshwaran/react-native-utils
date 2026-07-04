@@ -1,5 +1,5 @@
 {
-  "name": "react-native-utils",
+  "name": "@gnanamoorthy/react-native-utils",
   "version": "0.1.0",
   "description": "Used to store the common utilities for react native app",
   "main": "./lib/module/index.js",
@@ -12,20 +12,12 @@
     },
     "./package.json": "./package.json"
   },
+  "bin": {
+    "react-native-utils": "./lib/cli/scripts/cli.js"
+  },
   "files": [
     "src",
     "lib",
-    "android",
-    "ios",
-    "cpp",
-    "*.podspec",
-    "react-native.config.js",
-    "!ios/build",
-    "!android/build",
-    "!android/gradle",
-    "!android/gradlew",
-    "!android/gradlew.bat",
-    "!android/local.properties",
     "!**/__tests__",
     "!**/__fixtures__",
     "!**/__mocks__",
@@ -37,7 +29,8 @@
     "typecheck": "tsc",
     "lint": "eslint \"**/*.{js,ts,tsx}\"",
     "clean": "del-cli lib",
-    "prepare": "bob build",
+    "build:cli": "tsc -p tsconfig.cli.json && chmod +x lib/cli/scripts/cli.js",
+    "prepare": "bob build && npm run build:cli",
     "release": "release-it --only-version"
   },
   "keywords": [
@@ -71,6 +64,7 @@
     "@react-navigation/native": "^7.3.4",
     "@release-it/conventional-changelog": "^10.0.1",
     "@types/jest": "^29.5.14",
+    "@types/node": "^26.1.0",
     "@types/react": "^19.1.12",
     "commitlint": "^19.8.1",
     "del-cli": "^6.0.0",
@@ -137,6 +131,7 @@
   "react-native-builder-bob": {
     "source": "src",
     "output": "lib",
+    "exclude": "**/{__tests__,__fixtures__,__mocks__,clientGenerator}/**",
     "targets": [
       [
         "module",
@@ -151,10 +146,5 @@
         }
       ]
     ]
-  },
-  "create-react-native-library": {
-    "languages": "js",
-    "type": "library",
-    "version": "0.54.2"
   }
 }

@@ -2,7 +2,7 @@
   "compilerOptions": {
     "rootDir": ".",
     "paths": {
-      "react-native-utils": ["./src/index"],
+      "@gnanamoorthy/react-native-utils": ["./src/index"],
       "@utils/*": ["./src/utils/*"]
     },
     "allowUnreachableCode": false,
@@ -26,6 +26,7 @@
     "skipLibCheck": true,
     "strict": true,
     "target": "ESNext",
-    "verbatimModuleSyntax": true
+    "verbatimModuleSyntax": true,
+    "allowImportingTsExtensions": true
   }
 }

@@ -20,7 +20,7 @@ export default class MemoryCacheDriver implements APICacheDriver {
   }
 
   set(key: string, value: unknown, ttl: number): Promise<void> {
-    this.cache.set(key, { value, expiresAt: Date.now() + ttl * 1000 });
+    this.cache.set(key, { value, expiresAt: Date.now() + ttl });
     return Promise.resolve();
   }
 

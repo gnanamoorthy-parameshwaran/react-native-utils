@@ -20,7 +20,7 @@ export default class AsyncStorageCacheDriver implements APICacheDriver {
   }
 
   async set(key: string, value: unknown, ttl: number): Promise<void> {
-    const entry: CacheEntry = { value, expiresAt: Date.now() + ttl * 1000 };
+    const entry: CacheEntry = { value, expiresAt: Date.now() + ttl };
     await AsyncStorage.setItem(KEY_PREFIX + key, JSON.stringify(entry));
   }
 

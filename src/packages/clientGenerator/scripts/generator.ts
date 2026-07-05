@@ -80,6 +80,8 @@ type ResolvedRequestBody = {
   inlineType?: { name: string; text: string };
 };
 
+type ResolvedCache = { ttl: number };
+
 type ResolvedOperation = {
   version: string;
   /** Client output subdirectory, e.g. "BusinessUnit" for V1.BusinessUnit.Contact.getContacts -- keeps nested Contact ops out of the same file as top-level Contact ops. Equal to `resource` when there's no real folder segment, so every client file sits at a constant depth. */
@@ -93,6 +95,8 @@ type ResolvedOperation = {
   requestBody?: ResolvedRequestBody;
   /** The unwrapped `data` payload type of the response (before ResponseSuccessType<T> wrapping). */
   responseInner: { text: string; refs: Set<string> };
+  /** From the operation's `x-cache-config` extension. Only ever set on GET operations without query params -- caching a paginated list isn't supported yet. */
+  cache?: ResolvedCache;
 };
 
 type SynthesizedType = { name: string; text: string; refs: Set<string> };
@@ -212,7 +216,26 @@ class APIClientGenerator {
       queryParams,
       requestBody: this.resolveRequestBody(operation, methodPascal),
       responseInner: this.resolveResponseInner(operation),
+      cache: this.resolveCache(method, operation, queryParams),
     };
+  }
+
+  /**
+   * Reads the `x-cache-config` vendor extension (e.g. `{ "ttl": 300 }`, seconds)
+   * to decide whether a generated GET should carry a cacheConfig + invalidate
+   * helper. Only applies to GETs with no query params -- caching a paginated
+   * list isn't supported yet, so it's deliberately ignored there for now.
+   */
+  private resolveCache(
+    method: HttpMethodKey,
+    operation: Operation,
+    queryParams: ResolvedQueryParam[]
+  ): ResolvedCache | undefined {
+    if (method !== 'get' || queryParams.length > 0) return undefined;
+
+    const raw = operation['x-cache-config'];
+    const ttl = typeof raw === 'object' && raw ? Number(raw.ttl) : NaN;
+    return Number.isFinite(ttl) ? { ttl } : undefined;
   }
 
   /**
@@ -525,6 +548,7 @@ class APIClientGenerator {
     const hookLines: string[] = [];
     const callbackCodes: string[] = [];
     const returnItems: string[] = [];
+    let usesCache = false;
 
     group.forEach((operation) => {
       const built = this.buildMethod(operation);
@@ -535,7 +559,8 @@ class APIClientGenerator {
       });
       hookLines.push(built.hookLine);
       callbackCodes.push(built.callbackCode);
-      returnItems.push(built.loadingName, built.methodName);
+      returnItems.push(built.loadingName, ...built.methodNames);
+      usesCache = usesCache || built.usesCache;
     });
 
     const typeImportLines: string[] = [];
@@ -548,6 +573,9 @@ class APIClientGenerator {
     const header = [
       `import React from 'react';`,
       `import useAPI from '${this.config.useAPIImportPath}';`,
+      ...(usesCache
+        ? [`import { getCacheKey } from '@gnanamoorthy/react-native-utils';`]
+        : []),
       ...typeImportLines,
     ].join('\n');
 
@@ -598,8 +626,12 @@ class APIClientGenerator {
     const requestName = `${operation.methodName}Request`;
     const httpMethodKey = operation.httpMethod.toLowerCase() as HttpMethodKey;
     const loadingName = `${GERUNDS[httpMethodKey]}${this.loadingSuffix(operation.methodName)}`;
+    const invalidateName = `invalidate${methodPascal}Cache`;
+    const cacheKeyExpr = `getCacheKey('GET', \`${endpoint}\`)`;
 
-    const hookLine = `    const { loading: ${loadingName}, request: ${requestName} } = useAPI();`;
+    const hookLine = operation.cache
+      ? `    const { loading: ${loadingName}, request: ${requestName}, invalidateCache: ${invalidateName} } = useAPI();`
+      : `    const { loading: ${loadingName}, request: ${requestName} } = useAPI();`;
 
     const lines: string[] = [];
     lines.push(
@@ -616,8 +648,25 @@ class APIClientGenerator {
       `            endpoint: \`${endpoint}${hasQuery ? '${query}' : ''}\`,`
     );
     if (requestBodyLine) lines.push(requestBodyLine);
+    if (operation.cache) {
+      lines.push(
+        `            cacheConfig: { ttl: ${operation.cache.ttl}, key: ${cacheKeyExpr} },`
+      );
+    }
     lines.push(`        });`);
     lines.push(`    }, [${requestName}]);`);
+
+    if (operation.cache) {
+      // `cache` is only ever set for GETs with no query params, so `args`
+      // here is guaranteed to be just the path params -- enough to recompute
+      // the same cache key the getter used.
+      lines.push('');
+      lines.push(
+        `    const invalidate${methodPascal} = React.useCallback((${args.join(', ')}) => {`
+      );
+      lines.push(`        return ${invalidateName}(${cacheKeyExpr});`);
+      lines.push(`    }, [${invalidateName}]);`);
+    }
 
     const typeRefs: { name: string; group: string }[] = [
       { name: responseTypeName, group: operation.resource },
@@ -630,12 +679,17 @@ class APIClientGenerator {
       if (bodyGroup) typeRefs.push({ name: bodyType, group: bodyGroup });
     }
 
+    const methodNames = operation.cache
+      ? [operation.methodName, `invalidate${methodPascal}`]
+      : [operation.methodName];
+
     return {
       hookLine,
       callbackCode: lines.join('\n'),
       typeRefs,
       loadingName,
-      methodName: operation.methodName,
+      methodNames,
+      usesCache: !!operation.cache,
     };
   }
 }

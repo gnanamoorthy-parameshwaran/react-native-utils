@@ -1,5 +1,6 @@
 {
   "specUrl": "http://localhost:4000/spec.json",
   "useAPIImportPath": "../../../../hooks/useAPI",
-  "outputDir": "src/generated"
+  "outputDir": "src/generated",
+  "formatCommand": "npx prettier --write"
 }

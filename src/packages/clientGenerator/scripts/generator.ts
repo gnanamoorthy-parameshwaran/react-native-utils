@@ -522,7 +522,8 @@ class APIClientGenerator {
     if (!first) return;
 
     const importsByGroup = new Map<string, Set<string>>();
-    const methodCodes: string[] = [];
+    const hookLines: string[] = [];
+    const callbackCodes: string[] = [];
     const returnItems: string[] = [];
 
     group.forEach((operation) => {
@@ -532,7 +533,8 @@ class APIClientGenerator {
         names.add(name);
         importsByGroup.set(owningGroup, names);
       });
-      methodCodes.push(built.code);
+      hookLines.push(built.hookLine);
+      callbackCodes.push(built.callbackCode);
       returnItems.push(built.loadingName, built.methodName);
     });
 
@@ -549,7 +551,7 @@ class APIClientGenerator {
       ...typeImportLines,
     ].join('\n');
 
-    const content = `${header}\n\nexport default function use${first.resource}() {\n${methodCodes.join('\n\n')}\n\n    return { ${returnItems.join(', ')} };\n}\n`;
+    const content = `${header}\n\nexport default function use${first.resource}() {\n${hookLines.join('\n')}\n\n${callbackCodes.join('\n\n')}\n\n    return { ${returnItems.join(', ')} };\n}\n`;
 
     this.fileBuilder.createFile({
       name: `use${first.resource}.ts`,
@@ -597,10 +599,9 @@ class APIClientGenerator {
     const httpMethodKey = operation.httpMethod.toLowerCase() as HttpMethodKey;
     const loadingName = `${GERUNDS[httpMethodKey]}${this.loadingSuffix(operation.methodName)}`;
 
+    const hookLine = `    const { loading: ${loadingName}, request: ${requestName} } = useAPI();`;
+
     const lines: string[] = [];
-    lines.push(
-      `    const { loading: ${loadingName}, request: ${requestName} } = useAPI();`
-    );
     lines.push(
       `    const ${operation.methodName} = React.useCallback((${args.join(', ')}) => {`
     );
@@ -630,7 +631,8 @@ class APIClientGenerator {
     }
 
     return {
-      code: lines.join('\n'),
+      hookLine,
+      callbackCode: lines.join('\n'),
       typeRefs,
       loadingName,
       methodName: operation.methodName,

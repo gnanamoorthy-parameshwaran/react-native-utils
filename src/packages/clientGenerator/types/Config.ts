@@ -8,6 +8,12 @@ export type ClientGeneratorConfig = {
   useAPIImportPath: string;
   /** Where generated `types/` and `clients/` folders are written, relative to this config file. */
   outputDir: string;
+  /**
+   * Shell command run once generation finishes, with `outputDir` appended as its
+   * final argument, e.g. "npx prettier --write". Runs from the config file's
+   * directory. Omit to leave generated files as written.
+   */
+  formatCommand?: string;
   /** Absolute directory of the resolved config file; output paths are resolved against this. */
   rootDir: string;
 };

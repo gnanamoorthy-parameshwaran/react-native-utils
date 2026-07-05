@@ -39,6 +39,7 @@ export function loadConfig(configPathArg?: string): ClientGeneratorConfig {
     specUrl: raw.specUrl!,
     useAPIImportPath: raw.useAPIImportPath!,
     outputDir: raw.outputDir!,
+    formatCommand: raw.formatCommand,
     rootDir: path.dirname(resolvedPath),
   };
 }

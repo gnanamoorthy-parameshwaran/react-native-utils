@@ -3,8 +3,10 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import crypto from 'crypto';
+import { execSync } from 'child_process';
 import { loadConfig } from '../utils/config.ts';
 import APIClientGenerator from './generator.ts';
+import type { ClientGeneratorConfig } from '../types/Config.ts';
 import type { OpenAPI } from '../types/OpenAPISpec.ts';
 
 async function downloadSpecToTempFile(specUrl: string): Promise<string> {
@@ -36,6 +38,20 @@ async function generateClient(args: string[]) {
     new APIClientGenerator(spec, config).generate();
   } finally {
     fs.rmSync(tempSpecPath, { force: true });
+  }
+
+  if (config.formatCommand) formatGeneratedOutput(config);
+}
+
+function formatGeneratedOutput(config: ClientGeneratorConfig) {
+  const command = `${config.formatCommand} ${config.outputDir}`;
+  try {
+    execSync(command, { cwd: config.rootDir, stdio: 'inherit' });
+  } catch (error) {
+    console.error(
+      `Warning: formatCommand failed (${command}). Generated files were written unformatted.`,
+      error instanceof Error ? error.message : error
+    );
   }
 }
 

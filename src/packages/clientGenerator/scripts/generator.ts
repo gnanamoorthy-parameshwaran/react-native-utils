@@ -625,8 +625,12 @@ class APIClientGenerator {
     );
     const requestName = `${operation.methodName}Request`;
     const httpMethodKey = operation.httpMethod.toLowerCase() as HttpMethodKey;
-    const loadingName = `${GERUNDS[httpMethodKey]}${this.loadingSuffix(operation.methodName)}`;
-    const invalidateName = `invalidate${methodPascal}Cache`;
+    // Strips the leading verb the same way loading names do, so the public
+    // invalidate method reads as invalidateProducts/invalidateProduct rather
+    // than invalidateGetProducts.
+    const invalidateSuffix = this.loadingSuffix(operation.methodName);
+    const loadingName = `${GERUNDS[httpMethodKey]}${invalidateSuffix}`;
+    const invalidateName = `invalidate${invalidateSuffix}Cache`;
     const cacheKeyExpr = `getCacheKey('GET', \`${endpoint}\`)`;
 
     const hookLine = operation.cache
@@ -662,7 +666,7 @@ class APIClientGenerator {
       // the same cache key the getter used.
       lines.push('');
       lines.push(
-        `    const invalidate${methodPascal} = React.useCallback((${args.join(', ')}) => {`
+        `    const invalidate${invalidateSuffix} = React.useCallback((${args.join(', ')}) => {`
       );
       lines.push(`        return ${invalidateName}(${cacheKeyExpr});`);
       lines.push(`    }, [${invalidateName}]);`);
@@ -680,7 +684,7 @@ class APIClientGenerator {
     }
 
     const methodNames = operation.cache
-      ? [operation.methodName, `invalidate${methodPascal}`]
+      ? [operation.methodName, `invalidate${invalidateSuffix}`]
       : [operation.methodName];
 
     return {

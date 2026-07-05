@@ -2,7 +2,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 
-const PORT = process.env.PORT || 4000;
+const PORT = process.env.PORT || 4879;
 const specPath = path.join(__dirname, '..', 'openapi', 'spec.json');
 
 const server = http.createServer((req, res) => {
@@ -13,6 +13,13 @@ const server = http.createServer((req, res) => {
   }
   res.writeHead(404, { 'Content-Type': 'text/plain' });
   res.end('Not found');
+});
+
+server.on('error', (error) => {
+  // Fail loudly on a port collision instead of leaving the caller to fetch
+  // whatever else happens to be listening on PORT.
+  console.error(`Failed to start OpenAPI spec server: ${error.message}`);
+  process.exit(1);
 });
 
 server.listen(PORT, () => {

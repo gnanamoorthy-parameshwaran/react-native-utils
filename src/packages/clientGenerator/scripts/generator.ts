@@ -91,7 +91,10 @@ type ResolvedOperation = {
   methodName: string;
   httpMethod: Uppercase<HttpMethodKey>;
   pathTemplate: string;
-  pathParams: ResolvedParam[];
+  /** Parent-resource path params (e.g. `businessUnit` in `/business-units/{businessUnit}/expenses`) -- passed to the hook, not the method. */
+  hookParams: ResolvedParam[];
+  /** This resource's own id (e.g. `expense` in `/expenses/{expense}`) -- the URI's trailing path param, if any. Passed to the method, not the hook. */
+  methodParams: ResolvedParam[];
   queryParams: ResolvedQueryParam[];
   requestBody?: ResolvedRequestBody;
   /** The unwrapped `data` payload type of the response (before ResponseSuccessType<T> wrapping). */
@@ -205,6 +208,7 @@ class APIClientGenerator {
     );
     const methodPascal = StringUtil.pascalCase(methodName);
     const { pathParams, queryParams } = this.resolveParameters(operation);
+    const { hookParams, methodParams } = this.splitPathParams(uri, pathParams);
 
     return {
       version,
@@ -213,11 +217,40 @@ class APIClientGenerator {
       methodName,
       httpMethod: method.toUpperCase() as Uppercase<HttpMethodKey>,
       pathTemplate: uri,
-      pathParams,
+      hookParams,
+      methodParams,
       queryParams,
       requestBody: this.resolveRequestBody(operation, methodPascal),
       responseInner: this.resolveResponseInner(operation),
       cache: this.resolveCache(method, operation, queryParams),
+    };
+  }
+
+  /**
+   * Splits an operation's path params into the parent-scope ones (hook-level)
+   * and this resource's own id (method-level). The URI's trailing segment
+   * decides it: if it's itself a `{param}`, that's the resource-specific one
+   * (e.g. `{expense}` in `/expenses/{expense}`) and everything earlier is a
+   * parent id (e.g. `{businessUnit}` in `/business-units/{businessUnit}/expenses`).
+   * A collection URI (doesn't end in a param) has no resource-specific id at all.
+   */
+  private splitPathParams(uri: string, pathParams: ResolvedParam[]) {
+    const orderedNames = [...uri.matchAll(/\{([^}]+)\}/g)].map((m) => m[1]);
+    const ordered = orderedNames
+      .map((name) => pathParams.find((param) => param.name === name))
+      .filter((param): param is ResolvedParam => !!param);
+
+    const segments = uri.split('/').filter(Boolean);
+    const lastSegment = segments[segments.length - 1] ?? '';
+    const endsInParam = /^\{[^}]+\}$/.test(lastSegment);
+
+    if (!endsInParam || ordered.length === 0) {
+      return { hookParams: ordered, methodParams: [] as ResolvedParam[] };
+    }
+
+    return {
+      hookParams: ordered.slice(0, -1),
+      methodParams: ordered.slice(-1),
     };
   }
 
@@ -541,9 +574,44 @@ class APIClientGenerator {
     groups.forEach((group) => this.writeClientFile(group));
   }
 
-  private writeClientFile(group: ResolvedOperation[]) {
-    const first = group[0];
+  /**
+   * A sub-action endpoint (e.g. `/employees/{employee}/avatar`) doesn't end in
+   * a param, so `splitPathParams` treats `employee` as a parent id -- but
+   * every sibling operation in the same file (`/employees/{employee}`) treats
+   * it as this resource's own id. Left alone, that produces a hook-level
+   * `employee` and a method-level `employee` shadowing each other in the same
+   * file. If a name is method-level anywhere in the group, promote it to
+   * method-level everywhere in the group so it's consistent.
+   */
+  private reconcilePathParams(group: ResolvedOperation[]): ResolvedOperation[] {
+    const methodLevelNames = new Set<string>();
+    group.forEach((operation) =>
+      operation.methodParams.forEach((param) =>
+        methodLevelNames.add(param.name)
+      )
+    );
+
+    return group.map((operation) => {
+      const promoted = operation.hookParams.filter((param) =>
+        methodLevelNames.has(param.name)
+      );
+      if (promoted.length === 0) return operation;
+
+      return {
+        ...operation,
+        hookParams: operation.hookParams.filter(
+          (param) => !methodLevelNames.has(param.name)
+        ),
+        methodParams: [...promoted, ...operation.methodParams],
+      };
+    });
+  }
+
+  private writeClientFile(rawGroup: ResolvedOperation[]) {
+    const first = rawGroup[0];
     if (!first) return;
+
+    const group = this.reconcilePathParams(rawGroup);
 
     const importsByGroup = new Map<string, Set<string>>();
     const hookLines: string[] = [];
@@ -589,7 +657,28 @@ class APIClientGenerator {
       ...typeImportLines,
     ].join('\n');
 
-    const content = `${header}\n\nexport default function use${first.resource}() {\n${hookLines.join('\n')}\n\n${callbackCodes.join('\n\n')}\n\n    return { ${returnItems.join(', ')} };\n}\n`;
+    // A hook-level (parent) param is required only if every operation in this
+    // file needs it -- files can mix scopes (e.g. a nested list alongside
+    // top-level single-item CRUD), so one operation's parent id can't be
+    // forced on operations that never reference it.
+    const hookParamInfo = new Map<string, { type: string; count: number }>();
+    group.forEach((operation) => {
+      operation.hookParams.forEach((param) => {
+        const info = hookParamInfo.get(param.name) ?? {
+          type: param.type,
+          count: 0,
+        };
+        info.count += 1;
+        hookParamInfo.set(param.name, info);
+      });
+    });
+    const hookFields = [...hookParamInfo.entries()].map(([name, info]) => ({
+      name,
+      type: info.type,
+      required: info.count === group.length,
+    }));
+
+    const content = `${header}\n\nexport default function use${first.resource}(${this.buildObjectParam(hookFields)}) {\n${hookLines.join('\n')}\n\n${callbackCodes.join('\n\n')}\n\n    return { ${returnItems.join(', ')} };\n}\n`;
 
     this.fileBuilder.createFile({
       name: `use${first.resource}.ts`,
@@ -606,16 +695,43 @@ class APIClientGenerator {
     return relative.startsWith('.') ? relative : `./${relative}`;
   }
 
-  private buildMethod(operation: ResolvedOperation) {
-    const args: string[] = [];
+  /**
+   * A single destructured object parameter, e.g. `({ businessUnit }: { businessUnit: number })`,
+   * so every generated hook/method takes one extensible props object instead
+   * of positional args. Empty input means no parameter at all -- nothing to
+   * destructure yet, and generation-time codegen means there's nothing to
+   * "future-proof" ahead of an endpoint actually gaining an input.
+   */
+  private buildObjectParam(
+    fields: { name: string; type: string; required: boolean }[]
+  ): string {
+    if (fields.length === 0) return '';
 
-    operation.pathParams.forEach((param) =>
-      args.push(`${param.name}: ${param.type}`)
+    const names = fields.map((field) => field.name).join(', ');
+    const shape = fields
+      .map(
+        (field) => `${field.name}${field.required ? '' : '?'}: ${field.type};`
+      )
+      .join(' ');
+    const allOptional = fields.every((field) => !field.required);
+
+    return `{ ${names} }: { ${shape} }${allOptional ? ' = {}' : ''}`;
+  }
+
+  private buildMethod(operation: ResolvedOperation) {
+    const fields: { name: string; type: string; required: boolean }[] = [];
+
+    operation.methodParams.forEach((param) =>
+      fields.push({ name: param.name, type: param.type, required: true })
     );
 
     let requestBodyLine = '';
     if (operation.requestBody) {
-      args.push(`body: ${operation.requestBody.type}`);
+      fields.push({
+        name: 'body',
+        type: operation.requestBody.type,
+        required: true,
+      });
       requestBodyLine =
         operation.requestBody.contentType === 'application/json'
           ? `            body: JSON.stringify(body),\n            headers: new Headers({ 'Content-Type': 'application/json' }),`
@@ -632,9 +748,14 @@ class APIClientGenerator {
           (param) => `${param.name}${param.required ? '' : '?'}: ${param.type}`
         )
         .join(' ');
-      args.push(`params${queryRequired ? '' : '?'}: { ${shape} }`);
+      fields.push({
+        name: 'params',
+        type: `{ ${shape} }`,
+        required: queryRequired,
+      });
     }
 
+    const hookParamNames = operation.hookParams.map((param) => param.name);
     const methodPascal = StringUtil.pascalCase(operation.methodName);
     const responseTypeName = `${methodPascal}Response`;
     const endpoint = operation.pathTemplate.replace(
@@ -655,9 +776,15 @@ class APIClientGenerator {
       ? `    const { loading: ${loadingName}, request: ${requestName}, invalidateCache: ${invalidateName} } = useAPI();`
       : `    const { loading: ${loadingName}, request: ${requestName} } = useAPI();`;
 
+    // Hook-level params (e.g. businessUnit) aren't part of this method's own
+    // object -- they're free variables closing over the hook's destructured
+    // props, so they have to be in the useCallback deps alongside the request/
+    // invalidate function itself or a stale value could get captured.
+    const objectParam = this.buildObjectParam(fields);
+
     const lines: string[] = [];
     lines.push(
-      `    const ${operation.methodName} = React.useCallback((${args.join(', ')}) => {`
+      `    const ${operation.methodName} = React.useCallback((${objectParam}) => {`
     );
     if (hasQuery) {
       lines.push(
@@ -676,18 +803,20 @@ class APIClientGenerator {
       );
     }
     lines.push(`        });`);
-    lines.push(`    }, [${requestName}]);`);
+    lines.push(`    }, [${[requestName, ...hookParamNames].join(', ')}]);`);
 
     if (operation.cache) {
-      // `cache` is only ever set for GETs with no query params, so `args`
-      // here is guaranteed to be just the path params -- enough to recompute
-      // the same cache key the getter used.
+      // `cache` is only ever set for GETs with no query params, so `fields`
+      // here holds at most this resource's own id -- enough to recompute the
+      // same cache key the getter used.
       lines.push('');
       lines.push(
-        `    const invalidate${invalidateSuffix} = React.useCallback((${args.join(', ')}) => {`
+        `    const invalidate${invalidateSuffix} = React.useCallback((${objectParam}) => {`
       );
       lines.push(`        return ${invalidateName}(${cacheKeyExpr});`);
-      lines.push(`    }, [${invalidateName}]);`);
+      lines.push(
+        `    }, [${[invalidateName, ...hookParamNames].join(', ')}]);`
+      );
     }
 
     const typeRefs: { name: string; group: string }[] = [

@@ -9,7 +9,7 @@ export default function App() {
       <Text>react-native-utils</Text>
       <Button
         title={gettingAddress ? 'Loading...' : 'Fetch address'}
-        onPress={() => getAddress(1)}
+        onPress={() => getAddress({ address: 1 })}
       />
     </View>
   );

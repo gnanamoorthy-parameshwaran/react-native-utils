@@ -9,7 +9,8 @@ const DEFAULT_CONFIG_FILE = 'client-generator.config.json';
 const REQUIRED_KEYS: Array<keyof RawClientGeneratorConfig> = [
   'specUrl',
   'useAPIImportPath',
-  'outputDir',
+  'clientOutputDir',
+  'typeOutputDir',
 ];
 
 export function loadConfig(configPathArg?: string): ClientGeneratorConfig {
@@ -38,7 +39,8 @@ export function loadConfig(configPathArg?: string): ClientGeneratorConfig {
   return {
     specUrl: raw.specUrl!,
     useAPIImportPath: raw.useAPIImportPath!,
-    outputDir: raw.outputDir!,
+    clientOutputDir: raw.clientOutputDir!,
+    typeOutputDir: raw.typeOutputDir!,
     formatCommand: raw.formatCommand,
     rootDir: path.dirname(resolvedPath),
   };

@@ -1,6 +1,7 @@
 {
   "specUrl": "http://192.168.1.3:81/docs/api.json",
   "useAPIImportPath": "../../../../hooks/useAPI",
-  "outputDir": "src/generated",
+  "clientOutputDir": "src/generated/clients",
+  "typeOutputDir": "src/generated/types",
   "formatCommand": "npx prettier --write"
 }

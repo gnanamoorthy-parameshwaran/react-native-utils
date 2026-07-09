@@ -1,3 +1,4 @@
+import path from 'path';
 import FileBuilder from './files.ts';
 import OpenAPIParser from './parser.ts';
 import TypeResolver from './typeResolver.ts';
@@ -169,7 +170,7 @@ class APIClientGenerator {
     this.fileBuilder.createFile({
       name: 'index.ts',
       content: `export type ResponseSuccessType<T> = { data: T };\n`,
-      directory: this.config.outputDir,
+      directory: this.config.typeOutputDir,
     });
   }
 
@@ -264,9 +265,9 @@ class APIClientGenerator {
         version: StringUtil.pascalCase(versionPart),
         // Nested routes (e.g. V1.BusinessUnit.Contact.getContacts) share a file
         // name with an unrelated top-level resource (V1.Contact.Contact.getContact) --
-        // the folder subdirectory keeps them apart. Every client file lives 3
-        // levels below outputDir (clients/version/folder) so import depth stays
-        // constant regardless of whether folder happens to equal resource.
+        // the folder subdirectory keeps them apart. Every client file lives at
+        // clientOutputDir/version/folder, a constant depth, regardless of
+        // whether folder happens to equal resource.
         folder: StringUtil.pascalCase(folderPart),
         resource,
         methodName:
@@ -510,7 +511,7 @@ class APIClientGenerator {
 
     const importLines: string[] = [];
     if (usesResponseWrapper) {
-      importLines.push(`import type { ResponseSuccessType } from '..';`);
+      importLines.push(`import type { ResponseSuccessType } from './index';`);
     }
     importsByGroup.forEach((names, targetGroup) => {
       importLines.push(
@@ -523,7 +524,7 @@ class APIClientGenerator {
     this.fileBuilder.createFile({
       name: `${groupName}.ts`,
       content,
-      directory: `${this.config.outputDir}/types`,
+      directory: this.config.typeOutputDir,
     });
   }
 
@@ -563,10 +564,19 @@ class APIClientGenerator {
       usesCache = usesCache || built.usesCache;
     });
 
+    const clientDirectory = `${this.config.clientOutputDir}/${first.version}/${first.folder}`;
+    // clientOutputDir and typeOutputDir are independent config paths (no longer
+    // both nested under one shared outputDir), so the relative import between
+    // them has to be computed rather than assumed at a fixed depth.
+    const typeImportBase = this.relativeImportPath(
+      clientDirectory,
+      this.config.typeOutputDir
+    );
+
     const typeImportLines: string[] = [];
     importsByGroup.forEach((names, groupName) => {
       typeImportLines.push(
-        `import type { ${[...names].join(', ')} } from '../../../types/${groupName}';`
+        `import type { ${[...names].join(', ')} } from '${typeImportBase}/${groupName}';`
       );
     });
 
@@ -584,8 +594,16 @@ class APIClientGenerator {
     this.fileBuilder.createFile({
       name: `use${first.resource}.ts`,
       content,
-      directory: `${this.config.outputDir}/clients/${first.version}/${first.folder}`,
+      directory: clientDirectory,
     });
+  }
+
+  /** POSIX-style relative import specifier from one config-relative output directory to another. */
+  private relativeImportPath(fromDir: string, toDir: string): string {
+    const fromAbs = path.join(this.config.rootDir, fromDir);
+    const toAbs = path.join(this.config.rootDir, toDir);
+    const relative = path.relative(fromAbs, toAbs).split(path.sep).join('/');
+    return relative.startsWith('.') ? relative : `./${relative}`;
   }
 
   private buildMethod(operation: ResolvedOperation) {

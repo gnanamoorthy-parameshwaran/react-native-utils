@@ -44,7 +44,8 @@ async function generateClient(args: string[]) {
 }
 
 function formatGeneratedOutput(config: ClientGeneratorConfig) {
-  const command = `${config.formatCommand} ${config.outputDir}`;
+  const targets = [...new Set([config.clientOutputDir, config.typeOutputDir])];
+  const command = `${config.formatCommand} ${targets.join(' ')}`;
   try {
     execSync(command, { cwd: config.rootDir, stdio: 'inherit' });
   } catch (error) {

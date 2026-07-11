@@ -770,7 +770,7 @@ class APIClientGenerator {
     const invalidateSuffix = this.loadingSuffix(operation.methodName);
     const loadingName = `${GERUNDS[httpMethodKey]}${invalidateSuffix}`;
     const invalidateName = `invalidate${invalidateSuffix}Cache`;
-    const cacheKeyExpr = `getCacheKey('GET', \`${endpoint}\`)`;
+    const cacheKeyExpr = `getCacheKey({ method: 'GET', endpoint: \`${endpoint}\` })`;
 
     const hookLine = operation.cache
       ? `    const { loading: ${loadingName}, request: ${requestName}, invalidateCache: ${invalidateName} } = useAPI();`

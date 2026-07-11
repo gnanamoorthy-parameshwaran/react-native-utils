@@ -75,6 +75,18 @@ implementation.
 - All of a file's `useAPI()` calls (and their loading/request/invalidate destructures) are
   grouped together immediately after the function opens, **not** interleaved with each method's
   `React.useCallback` block.
+- **Object-props calling convention**: both the hook and every method take a single destructured
+  object argument, never positional params, so new fields can be added later without breaking
+  call sites. Path params are split by scope: a **parent** resource's id (e.g. `businessUnit` in
+  `/business-units/{businessUnit}/expenses`) is passed to the **hook**
+  (`useExpense({ businessUnit })`); this resource's **own** id — the URI's trailing path param,
+  if any (e.g. `expense` in `/expenses/{expense}`) — is passed to the **method**
+  (`getExpense({ expense })`) instead. A hook-level prop is required only if every operation in
+  that file needs it, else optional. If a path param is method-level in any operation of a file
+  (e.g. a sub-action route like `/employees/{employee}/avatar`, which doesn't end in a param but
+  shares a file with `/employees/{employee}`), it's promoted to method-level everywhere in that
+  file to avoid the hook and a method both binding a same-named but different variable. A
+  method/hook with no inputs at all keeps taking no argument, rather than a forced empty object.
 - Nested routes (e.g. a `BusinessUnit`'s `Contact` sub-resource) are kept in a separate
   `folder` subdirectory from an unrelated top-level resource of the same name, so
   `V1.BusinessUnit.Contact.getContacts` and `V1.Contact.Contact.getContact` don't collide into
@@ -89,7 +101,7 @@ implementation.
 - Only applies to `GET` operations with no query parameters — caching a paginated/query-filtered
   endpoint is intentionally out of scope for now.
 - When present, the generated method's `request()` call gets a `cacheConfig: { ttl, key }`
-  (key computed via `createAPI`'s exported `getCacheKey(method, endpoint)`), and a companion
+  (key computed via `createAPI`'s exported `getCacheKey({ method, endpoint })`), and a companion
   `invalidate{Resource}` method is generated next to it, taking the same path params and
   recomputing the identical cache key to call `invalidateCache`.
 
@@ -179,64 +191,72 @@ alongside the normal `bob build`.
 ### 3.6 Sample generated output
 
 ```ts
-// {clientOutputDir}/V1/BankAccount/useBankAccount.ts
+// {clientOutputDir}/V1/BusinessUnit/useExpense.ts
 import React from 'react';
 import useAPI from '../../../../hooks/useAPI';
 import { getCacheKey } from '@gnanamoorthy/react-native-utils';
 import type {
-  GetBankAccountsResponse,
-  GetBankAccountResponse,
-  UpdateBankAccountResponse,
-  UpdateBankAccountRequest,
-  DeleteBankAccountResponse,
-} from '../../../types/BankAccount';
+  GetExpensesResponse,
+  CreateExpenseResponse,
+  UpdateExpenseRequest,
+} from '../../../types/Expense';
 
-export default function useBankAccount() {
+export default function useExpense({ businessUnit }: { businessUnit: number }) {
   const {
-    loading: gettingBankAccounts,
-    request: getBankAccountsRequest,
-    invalidateCache: invalidateBankAccountsCache,
+    loading: gettingExpenses,
+    request: getExpensesRequest,
+    invalidateCache: invalidateExpensesCache,
   } = useAPI();
-  const { loading: gettingBankAccount, request: getBankAccountRequest } = useAPI();
-  const { loading: patchingBankAccount, request: updateBankAccountRequest } = useAPI();
-  const { loading: deletingBankAccount, request: deleteBankAccountRequest } = useAPI();
+  const { loading: postingExpense, request: createExpenseRequest } = useAPI();
 
-  const getBankAccounts = React.useCallback(
-    (customer: number) =>
-      getBankAccountsRequest<GetBankAccountsResponse>({
+  const getExpenses = React.useCallback(() => {
+    return getExpensesRequest<GetExpensesResponse>({
+      method: 'GET',
+      endpoint: `/v1/business-units/${businessUnit}/expenses`,
+      cacheConfig: {
+        ttl: 300000,
+        key: getCacheKey({
+          method: 'GET',
+          endpoint: `/v1/business-units/${businessUnit}/expenses`,
+        }),
+      },
+    });
+  }, [getExpensesRequest, businessUnit]);
+
+  const invalidateExpenses = React.useCallback(() => {
+    return invalidateExpensesCache(
+      getCacheKey({
         method: 'GET',
-        endpoint: `/v1/customers/${customer}/bank-accounts`,
-        cacheConfig: {
-          ttl: 300,
-          key: getCacheKey('GET', `/v1/customers/${customer}/bank-accounts`),
-        },
-      }),
-    [getBankAccountsRequest]
-  );
+        endpoint: `/v1/business-units/${businessUnit}/expenses`,
+      })
+    );
+  }, [invalidateExpensesCache, businessUnit]);
 
-  const invalidateBankAccounts = React.useCallback(
-    (customer: number) =>
-      invalidateBankAccountsCache(
-        getCacheKey('GET', `/v1/customers/${customer}/bank-accounts`)
-      ),
-    [invalidateBankAccountsCache]
+  const createExpense = React.useCallback(
+    ({ body }: { body: UpdateExpenseRequest }) => {
+      return createExpenseRequest<CreateExpenseResponse>({
+        method: 'POST',
+        endpoint: `/v1/business-units/${businessUnit}/expenses`,
+        body: JSON.stringify(body),
+        headers: new Headers({ 'Content-Type': 'application/json' }),
+      });
+    },
+    [createExpenseRequest, businessUnit]
   );
-
-  // ...getBankAccount / updateBankAccount / deleteBankAccount
 
   return {
-    gettingBankAccounts,
-    getBankAccounts,
-    invalidateBankAccounts,
-    gettingBankAccount,
-    getBankAccount,
-    patchingBankAccount,
-    updateBankAccount,
-    deletingBankAccount,
-    deleteBankAccount,
+    gettingExpenses,
+    getExpenses,
+    invalidateExpenses,
+    postingExpense,
+    createExpense,
   };
 }
 ```
+
+Note `businessUnit` is a **parent** id here (`/business-units/{businessUnit}/expenses`), so it's
+bound on the hook and required (every operation in this file needs it) — a resource with its own
+trailing id (e.g. `getExpense({ expense })`) would bind it on the method instead (§2.5).
 
 ### 3.7 Known scope limits
 

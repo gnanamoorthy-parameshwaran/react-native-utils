@@ -25,7 +25,8 @@ export default function createAPI({
       try {
         if (options.cacheConfig) {
           const cacheKey =
-            options.cacheConfig.key ?? getCacheKey(method, options.endpoint);
+            options.cacheConfig.key ??
+            getCacheKey({ method, endpoint: options.endpoint });
           const cached = await cache.get<T>(cacheKey);
           if (cached) return cached;
         }
@@ -62,7 +63,8 @@ export default function createAPI({
         if (response.ok) {
           if (options.cacheConfig) {
             const cacheKey =
-              options.cacheConfig.key ?? getCacheKey(method, options.endpoint);
+              options.cacheConfig.key ??
+              getCacheKey({ method, endpoint: options.endpoint });
             await cache.set(cacheKey, result, options.cacheConfig.ttl);
           }
           return result;

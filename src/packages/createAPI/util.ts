@@ -57,9 +57,12 @@ export const validateAndThrowExceptions = ({
   }
 };
 
-export function getCacheKey(
-  method: FetchProps['method'] = 'GET',
-  endpoint: string
-): string {
+export function getCacheKey({
+  method = 'GET',
+  endpoint,
+}: {
+  method: FetchProps['method'];
+  endpoint: string;
+}): string {
   return `${method}:${endpoint}`;
 }

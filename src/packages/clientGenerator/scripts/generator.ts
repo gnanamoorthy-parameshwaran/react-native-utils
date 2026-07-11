@@ -2,6 +2,7 @@ import path from 'path';
 import FileBuilder from './files.ts';
 import OpenAPIParser from './parser.ts';
 import TypeResolver from './typeResolver.ts';
+import DocUtil from '../utils/docUtil.ts';
 import StringUtil from '../utils/stringUtil.ts';
 import type { ClientGeneratorConfig } from '../types/Config.ts';
 import type {
@@ -70,7 +71,7 @@ const TRAILING_SCHEMA_QUALIFIERS = [
   'Detail',
 ];
 
-type ResolvedParam = { name: string; type: string };
+type ResolvedParam = { name: string; type: string; description?: string };
 type ResolvedQueryParam = ResolvedParam & { required: boolean };
 type ResolvedRequestBody = {
   contentType: 'application/json' | 'multipart/form-data';
@@ -82,6 +83,19 @@ type ResolvedRequestBody = {
 };
 
 type ResolvedCache = { ttl: number };
+
+/** Documentation carried off the spec so generated methods and hooks can be JSDoc'd. */
+type ResolvedDocs = {
+  summary?: string;
+  description?: string;
+  deprecated?: boolean;
+  externalDocsUrl?: string;
+  /** From the spec's global `tags` list -- one client file groups one tag's operations, so this documents the hook itself. */
+  tagDescription?: string;
+  requestBodyDescription?: string;
+  /** Description of the success (200/201/default) response. */
+  responseDescription?: string;
+};
 
 type ResolvedOperation = {
   version: string;
@@ -101,6 +115,7 @@ type ResolvedOperation = {
   responseInner: { text: string; refs: Set<string> };
   /** From the operation's `x-cache-config` extension. Only ever set on GET operations without query params -- caching a paginated list isn't supported yet. */
   cache?: ResolvedCache;
+  docs: ResolvedDocs;
 };
 
 type SynthesizedType = { name: string; text: string; refs: Set<string> };
@@ -148,6 +163,8 @@ class APIClientGenerator {
   protected typeResolver: TypeResolver;
   /** schema key -> group name, e.g. BaseContactResource -> Contact */
   protected schemaGroups = new Map<string, string>();
+  /** tag name -> its description from the spec's global `tags` list. */
+  protected tagDescriptions = new Map<string, string>();
 
   constructor(spec: OpenAPI, config: ClientGeneratorConfig) {
     this.spec = spec;
@@ -155,6 +172,10 @@ class APIClientGenerator {
     this.parser = new OpenAPIParser(spec);
     this.fileBuilder = new FileBuilder(config.rootDir);
     this.typeResolver = new TypeResolver();
+
+    (spec.tags ?? []).forEach((tag) => {
+      if (tag.description) this.tagDescriptions.set(tag.name, tag.description);
+    });
   }
 
   public generate() {
@@ -172,7 +193,7 @@ class APIClientGenerator {
   private writeSharedTypes() {
     this.fileBuilder.createFile({
       name: 'index.ts',
-      content: `export type ResponseSuccessType<T> = { data: T };\n`,
+      content: `/** Success envelope: the API wraps every payload in \`{ data: T }\`. */\nexport type ResponseSuccessType<T> = { data: T };\n`,
       directory: this.config.typeOutputDir,
     });
   }
@@ -223,6 +244,24 @@ class APIClientGenerator {
       requestBody: this.resolveRequestBody(operation, methodPascal),
       responseInner: this.resolveResponseInner(operation),
       cache: this.resolveCache(method, operation, queryParams),
+      docs: this.resolveDocs(operation),
+    };
+  }
+
+  private resolveDocs(operation: Operation): ResolvedDocs {
+    const tag = operation.tags?.[0];
+    const responses = operation.responses;
+    const success = responses['200'] ?? responses['201'] ?? responses.default;
+
+    return {
+      summary: operation.summary?.trim() || undefined,
+      description: operation.description?.trim() || undefined,
+      deprecated: operation.deprecated,
+      externalDocsUrl: operation.externalDocs?.url,
+      tagDescription: tag ? this.tagDescriptions.get(tag) : undefined,
+      requestBodyDescription:
+        operation.requestBody?.description?.trim() || undefined,
+      responseDescription: success?.description?.trim() || undefined,
     };
   }
 
@@ -370,6 +409,7 @@ class APIClientGenerator {
       .map((param) => ({
         name: param.name,
         type: this.typeResolver.resolve(param.schema).text,
+        description: param.description,
       }));
 
     const queryParams: ResolvedQueryParam[] = parameters
@@ -377,6 +417,7 @@ class APIClientGenerator {
       .map((param) => ({
         name: param.name,
         type: this.typeResolver.resolve(param.schema).text,
+        description: param.description,
         required: !!param.required,
       }));
 
@@ -522,7 +563,11 @@ class APIClientGenerator {
       const body = statements.length
         ? `{ ${statements.join(' ')} }`
         : 'Record<string, unknown>';
-      bodyParts.push(`export type ${key} = ${body};`);
+      const doc = DocUtil.block([
+        schema.description ?? schema.title,
+        schema.deprecated ? '@deprecated' : undefined,
+      ]);
+      bodyParts.push(`${doc ? `${doc}\n` : ''}export type ${key} = ${body};`);
     });
 
     group.synthesized.forEach((entry) => {
@@ -661,14 +706,19 @@ class APIClientGenerator {
     // file needs it -- files can mix scopes (e.g. a nested list alongside
     // top-level single-item CRUD), so one operation's parent id can't be
     // forced on operations that never reference it.
-    const hookParamInfo = new Map<string, { type: string; count: number }>();
+    const hookParamInfo = new Map<
+      string,
+      { type: string; count: number; description?: string }
+    >();
     group.forEach((operation) => {
       operation.hookParams.forEach((param) => {
         const info = hookParamInfo.get(param.name) ?? {
           type: param.type,
           count: 0,
+          description: undefined as string | undefined,
         };
         info.count += 1;
+        info.description = info.description ?? param.description;
         hookParamInfo.set(param.name, info);
       });
     });
@@ -676,9 +726,26 @@ class APIClientGenerator {
       name,
       type: info.type,
       required: info.count === group.length,
+      description:
+        info.description ??
+        `The \`${name}\` path parameter, shared by every request in this hook.`,
     }));
 
-    const content = `${header}\n\nexport default function use${first.resource}(${this.buildObjectParam(hookFields)}) {\n${hookLines.join('\n')}\n\n${callbackCodes.join('\n\n')}\n\n    return { ${returnItems.join(', ')} };\n}\n`;
+    const info = this.parser.getInfo();
+    const tagDescription = group.find(
+      (operation) => operation.docs.tagDescription
+    )?.docs.tagDescription;
+    const hookDoc = DocUtil.block([
+      tagDescription ?? `Client hook for the ${first.resource} endpoints.`,
+      '',
+      `Generated from the ${info.title} OpenAPI spec (v${info.version}) -- do not edit by hand.`,
+      '',
+      ...hookFields.map(
+        (field) => `@param props.${field.name} - ${field.description}`
+      ),
+    ]);
+
+    const content = `${header}\n\n${hookDoc}\nexport default function use${first.resource}(${this.buildObjectParam(hookFields)}) {\n${hookLines.join('\n')}\n\n${callbackCodes.join('\n\n')}\n\n    return { ${returnItems.join(', ')} };\n}\n`;
 
     this.fileBuilder.createFile({
       name: `use${first.resource}.ts`,
@@ -719,10 +786,21 @@ class APIClientGenerator {
   }
 
   private buildMethod(operation: ResolvedOperation) {
-    const fields: { name: string; type: string; required: boolean }[] = [];
+    const fields: {
+      name: string;
+      type: string;
+      required: boolean;
+      description: string;
+    }[] = [];
 
     operation.methodParams.forEach((param) =>
-      fields.push({ name: param.name, type: param.type, required: true })
+      fields.push({
+        name: param.name,
+        type: param.type,
+        required: true,
+        description:
+          param.description ?? `The \`${param.name}\` path parameter.`,
+      })
     );
 
     let requestBodyLine = '';
@@ -731,6 +809,11 @@ class APIClientGenerator {
         name: 'body',
         type: operation.requestBody.type,
         required: true,
+        description:
+          operation.docs.requestBodyDescription ??
+          (operation.requestBody.contentType === 'multipart/form-data'
+            ? 'The multipart form-data payload.'
+            : `The JSON request body (\`${operation.requestBody.type}\`).`),
       });
       requestBodyLine =
         operation.requestBody.contentType === 'application/json'
@@ -745,13 +828,14 @@ class APIClientGenerator {
       );
       const shape = operation.queryParams
         .map(
-          (param) => `${param.name}${param.required ? '' : '?'}: ${param.type}`
+          (param) => `${param.name}${param.required ? '' : '?'}: ${param.type};`
         )
         .join(' ');
       fields.push({
         name: 'params',
         type: `{ ${shape} }`,
         required: queryRequired,
+        description: 'Query string parameters.',
       });
     }
 
@@ -782,7 +866,43 @@ class APIClientGenerator {
     // invalidate function itself or a stale value could get captured.
     const objectParam = this.buildObjectParam(fields);
 
+    // Every method and every parameter gets a JSDoc entry -- when the spec has
+    // no summary/description, a fallback derived from the endpoint keeps the
+    // docs from silently going missing.
+    const endpointDoc = `\`${operation.httpMethod} ${operation.pathTemplate}\``;
+    const paramTags = fields.map(
+      (field) => `@param props.${field.name} - ${field.description}`
+    );
+    if (hasQuery) {
+      operation.queryParams.forEach((param) => {
+        paramTags.push(
+          `@param props.params.${param.name} - ${param.description ?? `The \`${param.name}\` query parameter.`}`
+        );
+      });
+    }
+
+    const methodDoc = DocUtil.block(
+      [
+        operation.docs.summary ?? `Calls ${endpointDoc}.`,
+        '',
+        operation.docs.description !== operation.docs.summary
+          ? operation.docs.description
+          : undefined,
+        '',
+        operation.docs.summary ? endpointDoc : undefined,
+        '',
+        ...paramTags,
+        `@returns ${operation.docs.responseDescription ?? `The \`${responseTypeName}\` payload.`}`,
+        operation.docs.deprecated ? '@deprecated' : undefined,
+        operation.docs.externalDocsUrl
+          ? `@see ${operation.docs.externalDocsUrl}`
+          : undefined,
+      ],
+      '    '
+    );
+
     const lines: string[] = [];
+    lines.push(methodDoc);
     lines.push(
       `    const ${operation.methodName} = React.useCallback((${objectParam}) => {`
     );
@@ -810,6 +930,16 @@ class APIClientGenerator {
       // here holds at most this resource's own id -- enough to recompute the
       // same cache key the getter used.
       lines.push('');
+      lines.push(
+        DocUtil.block(
+          [
+            `Invalidates the cached ${endpointDoc} response so the next \`${operation.methodName}\` call refetches.`,
+            '',
+            ...paramTags,
+          ],
+          '    '
+        )
+      );
       lines.push(
         `    const invalidate${invalidateSuffix} = React.useCallback((${objectParam}) => {`
       );

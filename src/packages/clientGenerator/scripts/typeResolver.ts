@@ -1,3 +1,4 @@
+import DocUtil from '../utils/docUtil.ts';
 import type { Reference, Schema } from '../types/OpenAPISpec.ts';
 
 const PRIMITIVE_MAP: Record<string, string> = {
@@ -80,13 +81,35 @@ export default class TypeResolver {
     const refs = new Set<string>();
 
     const statements = Object.keys(properties).map((key) => {
-      const resolved = this.resolve(properties[key]);
+      const property = properties[key];
+      const resolved = this.resolve(property);
       resolved.refs.forEach((ref) => refs.add(ref));
       const optional = required.includes(key) ? '' : '?';
-      return `${key}${optional}: ${resolved.text};`;
+      const doc = this.memberDoc(property);
+      return `${doc}${key}${optional}: ${resolved.text};`;
     });
 
     return { statements, refs };
+  }
+
+  /** Inline JSDoc for an object property, built from the schema's documentation fields; '' when the schema gives nothing to say. */
+  private memberDoc(schema?: Schema | Reference): string {
+    if (!schema) return '';
+
+    if (isReference(schema)) {
+      const text = schema.description ?? schema.summary;
+      return text ? `${DocUtil.inline(text)} ` : '';
+    }
+
+    const parts: string[] = [];
+    const summary = schema.description ?? schema.title;
+    if (summary) parts.push(summary);
+    if (schema.format) parts.push(`Format: \`${schema.format}\`.`);
+    if (schema.default !== undefined)
+      parts.push(`@default ${JSON.stringify(schema.default)}`);
+    if (schema.deprecated) parts.push('@deprecated');
+
+    return parts.length ? `${DocUtil.inline(parts.join(' '))} ` : '';
   }
 
   private resolveObject(schema: Schema): ResolvedType {

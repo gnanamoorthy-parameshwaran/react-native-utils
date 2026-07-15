@@ -2,6 +2,14 @@ export type ClientGeneratorConfig = {
     /** GET-able URL that returns the OpenAPI spec as JSON. No auth is applied. */
     specUrl: string;
     /**
+     * Which generator emits the output files. Either a built-in driver name
+     * ('react' is the only one shipped today) or a path to a custom generator
+     * module ("./codegen/my-generator.js", resolved relative to this config
+     * file) whose factory receives the parsed IR and returns the files to
+     * write -- see contracts/FrameworkGenerator.ts. Defaults to 'react'.
+     */
+    framework?: 'react' | (string & {});
+    /**
      * Import specifier used verbatim in every generated client file to reach
      * your `useAPI` hook, e.g. "@/hooks/useAPI" or "../../hooks/useAPI".
      */

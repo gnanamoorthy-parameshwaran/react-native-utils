@@ -4,8 +4,8 @@ import os from 'os';
 import path from 'path';
 import crypto from 'crypto';
 import {execSync} from 'child_process';
-import {loadConfig} from '../utils/config.ts';
-import APIClientGenerator from './generator.ts';
+import GeneratorManager from '../generators/GeneratorManager.ts';
+import ConfigLoader from '../support/ConfigLoader.ts';
 import type {ClientGeneratorConfig} from '../types/Config.ts';
 import type {OpenAPI} from '../types/OpenAPISpec.ts';
 
@@ -24,12 +24,12 @@ async function generateClient(args: string[]) {
     const configFlagIndex = args.indexOf('--config');
     const configPath = configFlagIndex !== -1 ? args[configFlagIndex + 1] : './client-generator.config.json';
 
-    const config = loadConfig(configPath);
+    const config = ConfigLoader.load(configPath);
     const tempSpecPath = await downloadSpecToTempFile(config.specUrl);
 
     try {
         const spec = JSON.parse(fs.readFileSync(tempSpecPath, 'utf-8')) as OpenAPI;
-        new APIClientGenerator(spec, config).generate();
+        await new GeneratorManager(spec, config).generate();
     } finally {
         fs.rmSync(tempSpecPath, {force: true});
     }

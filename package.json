@@ -135,7 +135,7 @@
     "react-native-builder-bob": {
         "source": "src",
         "output": "lib",
-        "exclude": "**/{__tests__,__fixtures__,__mocks__,clientGenerator}/**",
+        "exclude": "**/{__tests__,__fixtures__,__mocks__,generateAPI}/**",
         "targets": [
             [
                 "module",

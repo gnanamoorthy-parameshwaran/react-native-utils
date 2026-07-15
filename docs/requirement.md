@@ -1,6 +1,6 @@
 # OpenAPI Client Generator — Requirements & Implementation
 
-`@gnanamoorthy/react-native-utils` ships a code generator (`clientGenerator`) that reads an
+`@gnanamoorthy/react-native-utils` ships a code generator (`generateAPI`) that reads an
 OpenAPI spec (produced by a Laravel backend via dedoc/Scramble) and generates TypeScript types
 and React hooks that call the API through this package's own `createAPI`/`useAPI` runtime. This
 document records the requirements gathered while building it and the shape of the current
@@ -13,7 +13,7 @@ implementation.
   returned hook (`useAPI()`) exposes exactly `{ loading, request, invalidateCache }` — one
   generic `request<T>(options)` and one `loading` flag per hook call. This replaced an older
   `useAPI` shape (`Get/Post/Put/Patch/Delete` methods plus one loading flag per verb).
-- `clientGenerator` exists to stop hand-writing hooks like `useProduct()`/`useContact()` against
+- `generateAPI` exists to stop hand-writing hooks like `useProduct()`/`useContact()` against
   `useAPI()` by hand, and instead generate them from the backend's own OpenAPI spec, keeping
   request/response types and endpoint wiring in sync with the API automatically.
 
@@ -31,7 +31,8 @@ implementation.
 - Config is a JSON file, `client-generator.config.json`, resolved from the current working
   directory by default or via `--config <path>`.
 - Required fields: `specUrl`, `useAPIImportPath`, `clientOutputDir`, `typeOutputDir`.
-- Optional: `formatCommand`.
+- Optional: `formatCommand`, `framework` — either a built-in driver name (`"react"`, the default
+  and only one shipped so far) or a path to a custom generator module (§2.7).
 - `specUrl` is fetched with a plain `GET`, no authentication.
 - The fetched spec is downloaded to a temp file (`os.tmpdir()`) before being parsed, and the
   temp file is deleted after generation (success or failure).
@@ -44,8 +45,8 @@ implementation.
   added later without a breaking change.
 - The CLI is Node-only (uses `fs`/`path`/`os`/`child_process`) and is built separately from the
   React Native library build:
-    - `tsconfig.cli.json` compiles `src/packages/clientGenerator/**` to CommonJS under `lib/cli`.
-    - `clientGenerator` is excluded from the RN-facing `bob` build (`module`/`typescript` targets)
+    - `tsconfig.cli.json` compiles `src/packages/generateAPI/**` to CommonJS under `lib/cli`.
+    - `generateAPI` is excluded from the RN-facing `bob` build (`module`/`typescript` targets)
       so Node-only code doesn't get bundled into the RN/web-facing `lib/module` output.
 - Unused packaging leftovers from the original `create-react-native-library` scaffold (`android`,
   `ios`, `cpp`, `*.podspec`, `react-native.config.js` references, none of which exist in this
@@ -96,7 +97,7 @@ implementation.
   `folder` subdirectory from an unrelated top-level resource of the same name, so
   `V1.BusinessUnit.Contact.getContacts` and `V1.Contact.Contact.getContact` don't collide into
   the same generated file.
-- Generated code is passed through the user's own formatter (see §2.7) rather than the
+- Generated code is passed through the user's own formatter (see §2.8) rather than the
   generator's own fixed 4-space style, so output matches the consuming project's conventions
   (indent width, quotes, line length, etc.) automatically.
 
@@ -111,7 +112,31 @@ implementation.
   `invalidate{Resource}` method is generated next to it, taking the same path params and
   recomputing the identical cache key to call `invalidateCache`.
 
-### 2.7 Output layout
+### 2.7 Custom generators (user-defined output structure)
+
+- Users can define their **own** structure for the generated code instead of the built-in React
+  hooks: the generator provides the parsed method names/params/types (the `ParsedAPI` IR), and a
+  user-authored module decides what files to write.
+- Selected via the same `framework` config field: anything containing a path separator (or ending
+  in `.js`/`.cjs`/`.mjs`) is treated as a module path, resolved **relative to the config file**;
+  a bare name selects a built-in driver.
+- The module (CommonJS or ESM — loaded via dynamic `import()`) must export a factory, as its
+  default export or the whole `module.exports`:
+  `(context) => ({ generate() { return files; } })`, where `files` is
+  `{ directory, name, content }[]` with `directory` relative to the config file's folder.
+- `context` carries everything needed (see `contracts/FrameworkGenerator.ts`):
+    - `parsed` — the framework-neutral IR (`info`, `operations`, `schemas`, `schemaGroups`);
+    - `config` — the resolved generator config;
+    - `support` — reusable built-in pipeline pieces, so a custom generator only rewrites what it
+      wants to change: `groupOperations` (version/folder/resource grouping),
+      `reconcilePathParams` (hook-vs-method param promotion, §2.5), `generateTypeFiles` (the
+      built-in framework-neutral type files), `stringUtil`, `docUtil`.
+- A custom generator owns **all** output — it can keep the built-in type files by spreading
+  `support.generateTypeFiles()` into its result, or replace them entirely.
+- A working example lives at `example/codegen/flat-functions-generator.js` (flat framework-free
+  `fetch` functions, one file per resource).
+
+### 2.8 Output layout
 
 - Two independent output locations, `clientOutputDir` and `typeOutputDir` (config fields),
   rather than one shared `outputDir` with `clients/`/`types/` subfolders inside it.
@@ -131,24 +156,45 @@ implementation.
 ### 3.1 File layout
 
 ```
-src/packages/clientGenerator/
+src/packages/generateAPI/
 ├── scripts/
-│   ├── cli.ts            # bin entry: subcommand router, spec download, format-command run
-│   ├── generator.ts       # APIClientGenerator: resolves the spec and emits types + client hooks
-│   ├── parser.ts          # OpenAPIParser: thin accessors over the raw spec (paths, components, ...)
-│   ├── typeResolver.ts     # TypeResolver: OpenAPI Schema -> TS type text ($ref/array/enum/union/nullable-aware)
-│   └── files.ts           # FileBuilder: fs writes + a small block-text helper
-├── types/
-│   ├── Config.ts          # ClientGeneratorConfig / RawClientGeneratorConfig
-│   └── OpenAPISpec.ts      # OpenAPI 3.1 type definitions
-└── utils/
-    ├── config.ts           # loadConfig(): resolves + validates client-generator.config.json
-    └── stringUtil.ts        # camelCase / pascalCase
+│   └── cli.ts                       # bin entry: subcommand router, spec download, format-command run
+├── contracts/
+│   └── FrameworkGenerator.ts         # generator contract (+ GeneratedFile, GeneratorContext/Factory for custom modules)
+├── parsers/
+│   └── OperationParser.ts            # walks every path/method, runs the resolvers -> ParsedAPI IR
+├── resolvers/                        # one class per concern, spec -> IR only, no code emission
+│   ├── NamingResolver.ts            # operationId/tags/path -> version/folder/resource/method names
+│   ├── ParameterResolver.ts          # path/query params, hook-vs-method split + group reconciliation
+│   ├── RequestBodyResolver.ts        # JSON / multipart body -> usable type expression
+│   ├── ResponseResolver.ts           # unwraps the { data: T } envelope
+│   ├── CacheResolver.ts             # x-cache-config vendor extension
+│   ├── DocResolver.ts               # summary/description/deprecation/tag docs
+│   └── TypeResolver.ts              # OpenAPI Schema -> TS type text ($ref/array/enum/union/nullable-aware)
+├── generators/
+│   ├── GeneratorManager.ts           # orchestrates a run; resolves built-in driver or custom module from config
+│   ├── TypeFileGenerator.ts          # framework-neutral type files (shared by every driver)
+│   └── frameworks/
+│       └── ReactClientGenerator.ts   # React driver: ParsedAPI -> type files + use{Resource}.ts hook files
+├── support/
+│   ├── ConfigLoader.ts              # resolves + validates client-generator.config.json
+│   ├── DocUtil.ts                   # JSDoc block/inline rendering (sanitized against spec text)
+│   ├── FileBuilder.ts               # fs writes rooted at the config directory
+│   ├── OperationGrouper.ts          # version/folder/resource grouping (one group per client file)
+│   └── StringUtil.ts                # camelCase / pascalCase
+└── types/
+    ├── Config.ts                    # ClientGeneratorConfig / RawClientGeneratorConfig
+    ├── OpenAPISpec.ts               # OpenAPI 3.1 type definitions
+    └── ResolvedOperation.ts          # the framework-neutral IR (ResolvedOperation, ParsedAPI, ...)
 ```
 
-`generator.ts` currently owns the whole pipeline in one class, `APIClientGenerator`:
-resolving operations from the spec, generating type files, and emitting the React hook files —
-there is no separate abstraction yet for targeting a non-React frontend.
+The pipeline is split into a framework-neutral parsing side and swappable code emission:
+`OperationParser` + the `resolvers/` turn the spec into a `ParsedAPI` IR, and a generator
+implementing `FrameworkGenerator` (`generate(): GeneratedFile[]`) owns everything after that —
+grouping, file layout, type files, and client code. Supporting another built-in framework
+(e.g. Vue) means adding one driver class under `generators/frameworks/` and a case in
+`GeneratorManager.resolveDriver()`; users can also plug in their own generator module without
+touching this package at all (§2.7) — nothing on the parsing side changes either way.
 
 ### 3.2 Config schema (`types/Config.ts`)
 
@@ -159,18 +205,25 @@ there is no separate abstraction yet for targeting a non-React frontend.
 | `clientOutputDir`  | yes       | Where client hook files are written, relative to the config file.                                                                 |
 | `typeOutputDir`    | yes       | Where TS type files (incl. shared `index.ts`) are written, relative to the config file.                                           |
 | `formatCommand`    | no        | Shell command run after generation, e.g. `"npx prettier --write"`; gets both output dirs appended as arguments.                   |
+| `framework`        | no        | Built-in driver name (`"react"`, the default) or a path to a custom generator module, resolved relative to the config file (§2.7). |
 | `rootDir`          | (derived) | Absolute directory of the resolved config file; not set by the user.                                                              |
 
-### 3.3 Generation pipeline (`APIClientGenerator.generate()`)
+### 3.3 Generation pipeline (`GeneratorManager.generate()`)
 
-1. Build a `schemaGroups` map (`schema key -> resource group name`) from `components.schemas`.
-2. Write the shared `${typeOutputDir}/index.ts` (`ResponseSuccessType<T>`).
-3. Resolve every `(path, method)` in the spec into a `ResolvedOperation`: version/folder/resource/
-   method naming, path/query params, request body (JSON or `multipart/form-data`), response type,
-   and cache config (§2.6).
-4. Write one type file per resource group (`writeTypeFiles`/`writeTypeFile`).
-5. Group operations by `(version, folder, resource)` and write one client hook file per group
-   (`writeClientFiles`/`writeClientFile`/`buildMethod`).
+1. `OperationParser.parse()` builds the `ParsedAPI` IR: a `schemaGroups` map (`schema key ->
+   resource group name`) from `components.schemas`, plus every `(path, method)` resolved into a
+   `ResolvedOperation` — version/folder/resource/method naming, path/query params, request body
+   (JSON or `multipart/form-data`), response type, and cache config (§2.6) — each concern handled
+   by its own resolver class.
+2. `resolveDriver()` picks the generator from `config.framework`: a built-in driver class, or a
+   user module loaded with dynamic `import()` and called as a factory with the
+   `GeneratorContext` (§2.7).
+3. The generator's `generate()` returns every file to write. The built-in React driver emits the
+   shared `${typeOutputDir}/index.ts` (`ResponseSuccessType<T>`) and one type file per resource
+   group via `TypeFileGenerator`, then groups operations by `(version, folder, resource)`
+   (`OperationGrouper`), reconciles each group's path params
+   (`ParameterResolver.reconcileForGroup`), and assembles one client hook file per group.
+4. `FileBuilder` writes every generated file relative to the config's directory.
 
 ### 3.4 CLI usage
 
@@ -194,6 +247,9 @@ alongside the normal `bob build`.
 - `example/src/hooks/useAPI.ts` — the example app's `createAPI({...})` instance, which
   `useAPIImportPath` in the config points at.
 - `example/src/generated/` — the generated output (gitignored, regenerated on demand).
+- `example/codegen/flat-functions-generator.js` — a working custom generator module (§2.7):
+  emits flat framework-free `fetch` functions instead of React hooks, reusing the built-in type
+  files via `support.generateTypeFiles()`.
 
 ### 3.6 Sample generated output
 
@@ -263,5 +319,7 @@ trailing id (e.g. `getExpense({ expense })`) would bind it on the method instead
   present on the operation.
 - Cache TTL is a single static value per endpoint from the spec; it is not derived from the
   actual `Cache-Control` response header at request time.
-- Only React hook output is implemented; there is no separate interface for targeting other
-  frontend frameworks (e.g. Vue) yet.
+- Only the React driver is implemented. The framework seam exists (`FrameworkGenerator` contract,
+  framework-neutral `ParsedAPI` IR, `config.framework` selection), but a Vue driver hasn't been
+  written yet — there is also no Vue equivalent of the `createAPI`/`useAPI` runtime to generate
+  against, so Vue output can't currently be verified end-to-end.

@@ -1,4 +1,4 @@
-import DocUtil from '../utils/docUtil.ts';
+import DocUtil from '../support/DocUtil.ts';
 import type {Reference, Schema} from '../types/OpenAPISpec.ts';
 
 const PRIMITIVE_MAP: Record<string, string> = {

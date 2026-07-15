@@ -7,13 +7,13 @@ import http from 'http';
  */
 
 export type Reference = {
-  $ref: string;
-  summary?: string;
-  description?: string;
+    $ref: string;
+    summary?: string;
+    description?: string;
 };
 
 export type Extensible = {
-  [key: `x-${string}`]: any;
+    [key: `x-${string}`]: any;
 };
 
 /**
@@ -23,16 +23,16 @@ export type Extensible = {
  */
 
 export type OpenAPI = Extensible & {
-  openapi: string;
-  info: Info;
-  paths: Record<string, PathItem>;
-  jsonSchemaDialect?: string;
-  servers?: Server[];
-  webhooks?: Record<string, PathItem>;
-  components?: Components;
-  security?: SecurityRequirement[];
-  tags?: Tag[];
-  externalDocs?: ExternalDocumentation;
+    openapi: string;
+    info: Info;
+    paths: Record<string, PathItem>;
+    jsonSchemaDialect?: string;
+    servers?: Server[];
+    webhooks?: Record<string, PathItem>;
+    components?: Components;
+    security?: SecurityRequirement[];
+    tags?: Tag[];
+    externalDocs?: ExternalDocumentation;
 };
 
 /**
@@ -42,25 +42,25 @@ export type OpenAPI = Extensible & {
  */
 
 export type Info = Extensible & {
-  title: string;
-  version: string;
-  summary?: string;
-  description?: string;
-  termsOfService?: string;
-  contact?: Contact;
-  license?: License;
+    title: string;
+    version: string;
+    summary?: string;
+    description?: string;
+    termsOfService?: string;
+    contact?: Contact;
+    license?: License;
 };
 
 export type Contact = Extensible & {
-  name?: string;
-  url?: string;
-  email?: string;
+    name?: string;
+    url?: string;
+    email?: string;
 };
 
 export type License = Extensible & {
-  name: string;
-  identifier?: string;
-  url?: string;
+    name: string;
+    identifier?: string;
+    url?: string;
 };
 
 /**
@@ -70,15 +70,15 @@ export type License = Extensible & {
  */
 
 export type Server = Extensible & {
-  url: string;
-  description?: string;
-  variables?: Record<string, ServerVariable>;
+    url: string;
+    description?: string;
+    variables?: Record<string, ServerVariable>;
 };
 
 export type ServerVariable = Extensible & {
-  enum?: string[];
-  default: string;
-  description?: string;
+    enum?: string[];
+    default: string;
+    description?: string;
 };
 
 /**
@@ -88,19 +88,19 @@ export type ServerVariable = Extensible & {
  */
 
 export type PathItem = Extensible & {
-  $ref?: string;
-  summary?: string;
-  description?: string;
-  get?: Operation;
-  put?: Operation;
-  post?: Operation;
-  delete?: Operation;
-  options?: Operation;
-  head?: Operation;
-  patch?: Operation;
-  trace?: Operation;
-  servers?: Server[];
-  parameters?: (Parameter | Reference)[];
+    $ref?: string;
+    summary?: string;
+    description?: string;
+    get?: Operation;
+    put?: Operation;
+    post?: Operation;
+    delete?: Operation;
+    options?: Operation;
+    head?: Operation;
+    patch?: Operation;
+    trace?: Operation;
+    servers?: Server[];
+    parameters?: (Parameter | Reference)[];
 };
 
 /**
@@ -110,18 +110,18 @@ export type PathItem = Extensible & {
  */
 
 export type Operation = Extensible & {
-  tags?: string[];
-  summary?: string;
-  description?: string;
-  externalDocs?: ExternalDocumentation;
-  operationId?: string;
-  parameters?: (Parameter | Reference)[];
-  requestBody?: RequestBody | Reference;
-  responses: Responses;
-  callbacks?: Record<string, Callback | Reference>;
-  deprecated?: boolean;
-  security?: SecurityRequirement[];
-  servers?: Server[];
+    tags?: string[];
+    summary?: string;
+    description?: string;
+    externalDocs?: ExternalDocumentation;
+    operationId?: string;
+    parameters?: (Parameter | Reference)[];
+    requestBody?: RequestBody | Reference;
+    responses: Responses;
+    callbacks?: Record<string, Callback | Reference>;
+    deprecated?: boolean;
+    security?: SecurityRequirement[];
+    servers?: Server[];
 };
 
 /**
@@ -131,16 +131,16 @@ export type Operation = Extensible & {
  */
 
 export type Components = Extensible & {
-  schemas?: Record<string, Schema>;
-  responses?: Record<string, Response | Reference>;
-  parameters?: Record<string, Parameter | Reference>;
-  examples?: Record<string, Example | Reference>;
-  requestBodies?: Record<string, RequestBody | Reference>;
-  headers?: Record<string, Header | Reference>;
-  securitySchemes?: Record<string, SecurityScheme | Reference>;
-  links?: Record<string, Link | Reference>;
-  callbacks?: Record<string, Callback | Reference>;
-  pathItems?: Record<string, PathItem>;
+    schemas?: Record<string, Schema>;
+    responses?: Record<string, Response | Reference>;
+    parameters?: Record<string, Parameter | Reference>;
+    examples?: Record<string, Example | Reference>;
+    requestBodies?: Record<string, RequestBody | Reference>;
+    headers?: Record<string, Header | Reference>;
+    securitySchemes?: Record<string, SecurityScheme | Reference>;
+    links?: Record<string, Link | Reference>;
+    callbacks?: Record<string, Callback | Reference>;
+    pathItems?: Record<string, PathItem>;
 };
 
 /**
@@ -150,100 +150,100 @@ export type Components = Extensible & {
  */
 
 export type Schema = Extensible & {
-  /**
-   * JSON Schema Core
-   */
+    /**
+     * JSON Schema Core
+     */
 
-  $id?: string;
-  $schema?: string;
-  $ref?: string;
-  $defs?: Record<string, Schema>;
-  $anchor?: string;
-  $dynamicRef?: string;
-  $dynamicAnchor?: string;
+    $id?: string;
+    $schema?: string;
+    $ref?: string;
+    $defs?: Record<string, Schema>;
+    $anchor?: string;
+    $dynamicRef?: string;
+    $dynamicAnchor?: string;
 
-  /**
-   * Generic Validation
-   */
+    /**
+     * Generic Validation
+     */
 
-  type?: string | string[];
-  title?: string;
-  description?: string;
-  default?: any;
-  examples?: any[];
-  const?: any;
-  enum?: any[];
+    type?: string | string[];
+    title?: string;
+    description?: string;
+    default?: any;
+    examples?: any[];
+    const?: any;
+    enum?: any[];
 
-  /**
-   * Numeric Validation
-   */
+    /**
+     * Numeric Validation
+     */
 
-  multipleOf?: number;
-  maximum?: number;
-  exclusiveMaximum?: number;
-  minimum?: number;
-  exclusiveMinimum?: number;
+    multipleOf?: number;
+    maximum?: number;
+    exclusiveMaximum?: number;
+    minimum?: number;
+    exclusiveMinimum?: number;
 
-  /**
-   * String Validation
-   */
+    /**
+     * String Validation
+     */
 
-  maxLength?: number;
-  minLength?: number;
-  pattern?: string;
-  format?: string;
+    maxLength?: number;
+    minLength?: number;
+    pattern?: string;
+    format?: string;
 
-  /**
-   * Array Validation
-   */
+    /**
+     * Array Validation
+     */
 
-  items?: Schema | Reference;
-  prefixItems?: (Schema | Reference)[];
-  minItems?: number;
-  maxItems?: number;
-  uniqueItems?: boolean;
-  contains?: Schema | Reference;
-  minContains?: number;
-  maxContains?: number;
+    items?: Schema | Reference;
+    prefixItems?: (Schema | Reference)[];
+    minItems?: number;
+    maxItems?: number;
+    uniqueItems?: boolean;
+    contains?: Schema | Reference;
+    minContains?: number;
+    maxContains?: number;
 
-  /**
-   * Object Validation
-   */
+    /**
+     * Object Validation
+     */
 
-  properties?: Record<string, Schema | Reference>;
-  patternProperties?: Record<string, Schema | Reference>;
-  additionalProperties?: boolean | Schema | Reference;
-  unevaluatedProperties?: boolean | Schema | Reference;
-  required?: string[];
-  dependentRequired?: Record<string, string[]>;
-  propertyNames?: Schema | Reference;
-  minProperties?: number;
-  maxProperties?: number;
+    properties?: Record<string, Schema | Reference>;
+    patternProperties?: Record<string, Schema | Reference>;
+    additionalProperties?: boolean | Schema | Reference;
+    unevaluatedProperties?: boolean | Schema | Reference;
+    required?: string[];
+    dependentRequired?: Record<string, string[]>;
+    propertyNames?: Schema | Reference;
+    minProperties?: number;
+    maxProperties?: number;
 
-  /**
-   * Composition
-   */
+    /**
+     * Composition
+     */
 
-  allOf?: (Schema | Reference)[];
-  anyOf?: (Schema | Reference)[];
-  oneOf?: (Schema | Reference)[];
-  not?: Schema | Reference;
-  if?: Schema | Reference;
-  then?: Schema | Reference;
-  else?: Schema | Reference;
+    allOf?: (Schema | Reference)[];
+    anyOf?: (Schema | Reference)[];
+    oneOf?: (Schema | Reference)[];
+    not?: Schema | Reference;
+    if?: Schema | Reference;
+    then?: Schema | Reference;
+    else?: Schema | Reference;
 
-  /**
-   * OpenAPI Extensions
-   */
+    /**
+     * OpenAPI Extensions
+     */
 
-  discriminator?: Discriminator;
-  xml?: XML;
-  externalDocs?: ExternalDocumentation;
-  example?: any;
-  deprecated?: boolean;
-  readOnly?: boolean;
-  writeOnly?: boolean;
-  nullable?: boolean;
+    discriminator?: Discriminator;
+    xml?: XML;
+    externalDocs?: ExternalDocumentation;
+    example?: any;
+    deprecated?: boolean;
+    readOnly?: boolean;
+    writeOnly?: boolean;
+    nullable?: boolean;
 };
 
 /**
@@ -253,10 +253,10 @@ export type Schema = Extensible & {
  */
 
 export type MediaType = Extensible & {
-  schema?: Schema | Reference;
-  example?: any;
-  examples?: Record<string, Example | Reference>;
-  encoding?: Record<string, Encoding>;
+    schema?: Schema | Reference;
+    example?: any;
+    examples?: Record<string, Example | Reference>;
+    encoding?: Record<string, Encoding>;
 };
 
 /**
@@ -266,9 +266,9 @@ export type MediaType = Extensible & {
  */
 
 export type RequestBody = Extensible & {
-  description?: string;
-  content: Record<string, MediaType>;
-  required?: boolean;
+    description?: string;
+    content: Record<string, MediaType>;
+    required?: boolean;
 };
 
 /**
@@ -278,10 +278,10 @@ export type RequestBody = Extensible & {
  */
 
 export type Response = Extensible & {
-  description: string;
-  headers?: Record<string, Header | Reference>;
-  content?: Record<string, MediaType>;
-  links?: Record<string, Link | Reference>;
+    description: string;
+    headers?: Record<string, Header | Reference>;
+    content?: Record<string, MediaType>;
+    links?: Record<string, Link | Reference>;
 };
 
 export type Responses = Record<string, Response | Reference>;
@@ -293,19 +293,19 @@ export type Responses = Record<string, Response | Reference>;
  */
 
 export type Parameter = Extensible & {
-  name: string;
-  in: 'query' | 'header' | 'path' | 'cookie';
-  description?: string;
-  required?: boolean;
-  deprecated?: boolean;
-  allowEmptyValue?: boolean;
-  style?: string;
-  explode?: boolean;
-  allowReserved?: boolean;
-  schema?: Schema | Reference;
-  example?: any;
-  examples?: Record<string, Example | Reference>;
-  content?: Record<string, MediaType>;
+    name: string;
+    in: 'query' | 'header' | 'path' | 'cookie';
+    description?: string;
+    required?: boolean;
+    deprecated?: boolean;
+    allowEmptyValue?: boolean;
+    style?: string;
+    explode?: boolean;
+    allowReserved?: boolean;
+    schema?: Schema | Reference;
+    example?: any;
+    examples?: Record<string, Example | Reference>;
+    content?: Record<string, MediaType>;
 };
 
 /**
@@ -323,10 +323,10 @@ export type Header = Omit<Parameter, 'name' | 'in'>;
  */
 
 export type Example = Extensible & {
-  summary?: string;
-  description?: string;
-  value?: any;
-  externalValue?: string;
+    summary?: string;
+    description?: string;
+    value?: any;
+    externalValue?: string;
 };
 
 /**
@@ -336,11 +336,11 @@ export type Example = Extensible & {
  */
 
 export type Encoding = Extensible & {
-  contentType?: string;
-  headers?: Record<string, Header | Reference>;
-  style?: string;
-  explode?: boolean;
-  allowReserved?: boolean;
+    contentType?: string;
+    headers?: Record<string, Header | Reference>;
+    style?: string;
+    explode?: boolean;
+    allowReserved?: boolean;
 };
 
 /**
@@ -350,12 +350,12 @@ export type Encoding = Extensible & {
  */
 
 export type Link = Extensible & {
-  operationRef?: string;
-  operationId?: string;
-  parameters?: Record<string, any>;
-  requestBody?: any;
-  description?: string;
-  server?: Server;
+    operationRef?: string;
+    operationId?: string;
+    parameters?: Record<string, any>;
+    requestBody?: any;
+    description?: string;
+    server?: Server;
 };
 
 /**
@@ -375,48 +375,48 @@ export type Callback = Record<string, PathItem>;
 export type SecurityRequirement = Record<string, string[]>;
 
 export type SecurityScheme = Extensible & {
-  type: 'apiKey' | 'http' | 'mutualTLS' | 'oauth2' | 'openIdConnect';
-  description?: string;
+    type: 'apiKey' | 'http' | 'mutualTLS' | 'oauth2' | 'openIdConnect';
+    description?: string;
 
-  /**
-   * apiKey
-   */
+    /**
+     * apiKey
+     */
 
-  name?: string;
-  in?: 'query' | 'header' | 'cookie';
+    name?: string;
+    in?: 'query' | 'header' | 'cookie';
 
-  /**
-   * http
-   */
+    /**
+     * http
+     */
 
-  scheme?: string;
-  bearerFormat?: string;
+    scheme?: string;
+    bearerFormat?: string;
 
-  /**
-   * oauth2
-   */
+    /**
+     * oauth2
+     */
 
-  flows?: OAuthFlows;
+    flows?: OAuthFlows;
 
-  /**
-   * openIdConnect
-   */
+    /**
+     * openIdConnect
+     */
 
-  openIdConnectUrl?: string;
+    openIdConnectUrl?: string;
 };
 
 export type OAuthFlows = Extensible & {
-  implicit?: OAuthFlow;
-  password?: OAuthFlow;
-  clientCredentials?: OAuthFlow;
-  authorizationCode?: OAuthFlow;
+    implicit?: OAuthFlow;
+    password?: OAuthFlow;
+    clientCredentials?: OAuthFlow;
+    authorizationCode?: OAuthFlow;
 };
 
 export type OAuthFlow = Extensible & {
-  authorizationUrl?: string;
-  tokenUrl?: string;
-  refreshUrl?: string;
-  scopes: Record<string, string>;
+    authorizationUrl?: string;
+    tokenUrl?: string;
+    refreshUrl?: string;
+    scopes: Record<string, string>;
 };
 
 /**
@@ -426,11 +426,11 @@ export type OAuthFlow = Extensible & {
  */
 
 export type XML = Extensible & {
-  name?: string;
-  namespace?: string;
-  prefix?: string;
-  attribute?: boolean;
-  wrapped?: boolean;
+    name?: string;
+    namespace?: string;
+    prefix?: string;
+    attribute?: boolean;
+    wrapped?: boolean;
 };
 
 /**
@@ -440,8 +440,8 @@ export type XML = Extensible & {
  */
 
 export type Discriminator = Extensible & {
-  propertyName: string;
-  mapping?: Record<string, string>;
+    propertyName: string;
+    mapping?: Record<string, string>;
 };
 
 /**
@@ -451,8 +451,8 @@ export type Discriminator = Extensible & {
  */
 
 export type ExternalDocumentation = Extensible & {
-  url: string;
-  description?: string;
+    url: string;
+    description?: string;
 };
 
 /**
@@ -462,9 +462,9 @@ export type ExternalDocumentation = Extensible & {
  */
 
 export type Tag = Extensible & {
-  name: string;
-  description?: string;
-  externalDocs?: ExternalDocumentation;
+    name: string;
+    description?: string;
+    externalDocs?: ExternalDocumentation;
 };
 
 /**
@@ -485,5 +485,4 @@ export type HTTPStatusCode = keyof typeof http.STATUS_CODES;
  * "5XX"
  * "default"
  */
-export type OpenAPIResponseKey =
-  HTTPStatusCode | `${1 | 2 | 3 | 4 | 5}XX` | 'default';
+export type OpenAPIResponseKey = HTTPStatusCode | `${1 | 2 | 3 | 4 | 5}XX` | 'default';

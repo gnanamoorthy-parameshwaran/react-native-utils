@@ -1,5 +1,5 @@
-import { createAPI } from '@gnanamoorthy/react-native-utils';
+import {createAPI} from '@gnanamoorthy/react-native-utils';
 
 export default createAPI({
-  baseURL: 'http://voicebilling.com:81/api',
+    baseURL: 'http://voicebilling.com:81/api',
 });

@@ -20,12 +20,14 @@ implementation.
 ## 2. Requirements
 
 ### 2.1 Target `useAPI` shape
+
 - Generated code must call the **new** `useAPI()` shape (`{ loading, request, invalidateCache }`),
   not the old per-verb one.
 - Each generated method calls `useAPI()` **itself** (isolated loading per method) rather than
   sharing one `useAPI()` call across a whole file.
 
 ### 2.2 Configuration
+
 - Config is a JSON file, `client-generator.config.json`, resolved from the current working
   directory by default or via `--config <path>`.
 - Required fields: `specUrl`, `useAPIImportPath`, `clientOutputDir`, `typeOutputDir`.
@@ -35,20 +37,22 @@ implementation.
   temp file is deleted after generation (success or failure).
 
 ### 2.3 CLI / packaging
+
 - Package renamed to `@gnanamoorthy/react-native-utils` so it can be run as
   `npx @gnanamoorthy/react-native-utils generate-client --config <path>`.
 - The CLI is a subcommand router (`generate-client` is the only subcommand today) so more can be
   added later without a breaking change.
 - The CLI is Node-only (uses `fs`/`path`/`os`/`child_process`) and is built separately from the
   React Native library build:
-  - `tsconfig.cli.json` compiles `src/packages/clientGenerator/**` to CommonJS under `lib/cli`.
-  - `clientGenerator` is excluded from the RN-facing `bob` build (`module`/`typescript` targets)
-    so Node-only code doesn't get bundled into the RN/web-facing `lib/module` output.
+    - `tsconfig.cli.json` compiles `src/packages/clientGenerator/**` to CommonJS under `lib/cli`.
+    - `clientGenerator` is excluded from the RN-facing `bob` build (`module`/`typescript` targets)
+      so Node-only code doesn't get bundled into the RN/web-facing `lib/module` output.
 - Unused packaging leftovers from the original `create-react-native-library` scaffold (`android`,
   `ios`, `cpp`, `*.podspec`, `react-native.config.js` references, none of which exist in this
   repo) were removed from `package.json`'s `files` field before publishing.
 
 ### 2.4 Type generation
+
 - Component schemas are grouped by resource: qualifiers (`Base`, `Create`, `Update`, `Delete`,
   `Store`, `My` as prefixes; `Resource`, `Request`, `Response`, `List`, `Detail` as suffixes) are
   stripped to find the shared name behind a family of schemas — e.g. `BaseContactResource` and
@@ -61,6 +65,7 @@ implementation.
 - `ResponseSuccessType<T> = { data: T }` is a single shared type, written once.
 
 ### 2.5 Client (hook) generation
+
 - One React hook file per `(version, folder, resource)` group.
 - **Method naming**: prefers the OpenAPI `operationId`'s `Version.Folder.File.method` convention
   (used by this backend's Scramble setup) when present; falls back to `tags` + the URL path for
@@ -96,6 +101,7 @@ implementation.
   (indent width, quotes, line length, etc.) automatically.
 
 ### 2.6 Caching
+
 - Per-endpoint cache behavior is read from an `x-cache-config` OpenAPI vendor extension on the
   operation, e.g. `{ "ttl": 300 }` (seconds).
 - Only applies to `GET` operations with no query parameters — caching a paginated/query-filtered
@@ -106,13 +112,14 @@ implementation.
   recomputing the identical cache key to call `invalidateCache`.
 
 ### 2.7 Output layout
+
 - Two independent output locations, `clientOutputDir` and `typeOutputDir` (config fields),
   rather than one shared `outputDir` with `clients/`/`types/` subfolders inside it.
 - Files are written **directly** under each configured directory — no extra `clients`/`types`
   folder segment:
-  - Client files: `{clientOutputDir}/{version}/{folder}/use{Resource}.ts`.
-  - Type files: `{typeOutputDir}/{Resource}.ts`, plus a shared `{typeOutputDir}/index.ts` for
-    `ResponseSuccessType<T>`.
+    - Client files: `{clientOutputDir}/{version}/{folder}/use{Resource}.ts`.
+    - Type files: `{typeOutputDir}/{Resource}.ts`, plus a shared `{typeOutputDir}/index.ts` for
+      `ResponseSuccessType<T>`.
 - Because the two directories are independently configurable (not both nested under one root),
   the relative import from a client file to its types is computed dynamically
   (`path.relative`) rather than assumed at a fixed depth.
@@ -145,14 +152,14 @@ there is no separate abstraction yet for targeting a non-React frontend.
 
 ### 3.2 Config schema (`types/Config.ts`)
 
-| Field              | Required | Description                                                                 |
-| ------------------ | -------- | ----------------------------------------------------------------------------- |
-| `specUrl`           | yes      | GET-able URL returning the OpenAPI spec as JSON. No auth applied.             |
-| `useAPIImportPath`   | yes      | Import specifier used verbatim in every generated client file to reach the consumer's `useAPI` hook, e.g. `"../../hooks/useAPI"`. |
-| `clientOutputDir`    | yes      | Where client hook files are written, relative to the config file.             |
-| `typeOutputDir`      | yes      | Where TS type files (incl. shared `index.ts`) are written, relative to the config file. |
-| `formatCommand`      | no       | Shell command run after generation, e.g. `"npx prettier --write"`; gets both output dirs appended as arguments. |
-| `rootDir`            | (derived) | Absolute directory of the resolved config file; not set by the user.         |
+| Field              | Required  | Description                                                                                                                       |
+| ------------------ | --------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `specUrl`          | yes       | GET-able URL returning the OpenAPI spec as JSON. No auth applied.                                                                 |
+| `useAPIImportPath` | yes       | Import specifier used verbatim in every generated client file to reach the consumer's `useAPI` hook, e.g. `"../../hooks/useAPI"`. |
+| `clientOutputDir`  | yes       | Where client hook files are written, relative to the config file.                                                                 |
+| `typeOutputDir`    | yes       | Where TS type files (incl. shared `index.ts`) are written, relative to the config file.                                           |
+| `formatCommand`    | no        | Shell command run after generation, e.g. `"npx prettier --write"`; gets both output dirs appended as arguments.                   |
+| `rootDir`          | (derived) | Absolute directory of the resolved config file; not set by the user.                                                              |
 
 ### 3.3 Generation pipeline (`APIClientGenerator.generate()`)
 
@@ -194,63 +201,55 @@ alongside the normal `bob build`.
 // {clientOutputDir}/V1/BusinessUnit/useExpense.ts
 import React from 'react';
 import useAPI from '../../../../hooks/useAPI';
-import { getCacheKey } from '@gnanamoorthy/react-native-utils';
-import type {
-  GetExpensesResponse,
-  CreateExpenseResponse,
-  UpdateExpenseRequest,
-} from '../../../types/Expense';
+import {getCacheKey} from '@gnanamoorthy/react-native-utils';
+import type {GetExpensesResponse, CreateExpenseResponse, UpdateExpenseRequest} from '../../../types/Expense';
 
-export default function useExpense({ businessUnit }: { businessUnit: number }) {
-  const {
-    loading: gettingExpenses,
-    request: getExpensesRequest,
-    invalidateCache: invalidateExpensesCache,
-  } = useAPI();
-  const { loading: postingExpense, request: createExpenseRequest } = useAPI();
+export default function useExpense({businessUnit}: {businessUnit: number}) {
+    const {loading: gettingExpenses, request: getExpensesRequest, invalidateCache: invalidateExpensesCache} = useAPI();
+    const {loading: postingExpense, request: createExpenseRequest} = useAPI();
 
-  const getExpenses = React.useCallback(() => {
-    return getExpensesRequest<GetExpensesResponse>({
-      method: 'GET',
-      endpoint: `/v1/business-units/${businessUnit}/expenses`,
-      cacheConfig: {
-        ttl: 300000,
-        key: getCacheKey({
-          method: 'GET',
-          endpoint: `/v1/business-units/${businessUnit}/expenses`,
-        }),
-      },
-    });
-  }, [getExpensesRequest, businessUnit]);
+    const getExpenses = React.useCallback(() => {
+        return getExpensesRequest<GetExpensesResponse>({
+            method: 'GET',
+            endpoint: `/v1/business-units/${businessUnit}/expenses`,
+            cacheConfig: {
+                ttl: 300000,
+                key: getCacheKey({
+                    method: 'GET',
+                    endpoint: `/v1/business-units/${businessUnit}/expenses`,
+                }),
+            },
+        });
+    }, [getExpensesRequest, businessUnit]);
 
-  const invalidateExpenses = React.useCallback(() => {
-    return invalidateExpensesCache(
-      getCacheKey({
-        method: 'GET',
-        endpoint: `/v1/business-units/${businessUnit}/expenses`,
-      })
+    const invalidateExpenses = React.useCallback(() => {
+        return invalidateExpensesCache(
+            getCacheKey({
+                method: 'GET',
+                endpoint: `/v1/business-units/${businessUnit}/expenses`,
+            }),
+        );
+    }, [invalidateExpensesCache, businessUnit]);
+
+    const createExpense = React.useCallback(
+        ({body}: {body: UpdateExpenseRequest}) => {
+            return createExpenseRequest<CreateExpenseResponse>({
+                method: 'POST',
+                endpoint: `/v1/business-units/${businessUnit}/expenses`,
+                body: JSON.stringify(body),
+                headers: new Headers({'Content-Type': 'application/json'}),
+            });
+        },
+        [createExpenseRequest, businessUnit],
     );
-  }, [invalidateExpensesCache, businessUnit]);
 
-  const createExpense = React.useCallback(
-    ({ body }: { body: UpdateExpenseRequest }) => {
-      return createExpenseRequest<CreateExpenseResponse>({
-        method: 'POST',
-        endpoint: `/v1/business-units/${businessUnit}/expenses`,
-        body: JSON.stringify(body),
-        headers: new Headers({ 'Content-Type': 'application/json' }),
-      });
-    },
-    [createExpenseRequest, businessUnit]
-  );
-
-  return {
-    gettingExpenses,
-    getExpenses,
-    invalidateExpenses,
-    postingExpense,
-    createExpense,
-  };
+    return {
+        gettingExpenses,
+        getExpenses,
+        invalidateExpenses,
+        postingExpense,
+        createExpense,
+    };
 }
 ```
 

@@ -1,8 +1,8 @@
 import React from 'react';
-import type { EmitEvent } from '../types';
+import type {EmitEvent} from '../types';
 
-const APIContext = React.createContext<{ emitEvent: EmitEvent }>({
-  emitEvent: () => {},
+const APIContext = React.createContext<{emitEvent: EmitEvent}>({
+    emitEvent: () => {},
 });
 
 export default APIContext;

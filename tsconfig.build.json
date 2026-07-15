@@ -1,4 +1,4 @@
 {
-  "extends": "./tsconfig",
-  "exclude": ["example", "lib", "src/packages/clientGenerator"]
+    "extends": "./tsconfig",
+    "exclude": ["example", "lib", "src/packages/clientGenerator"]
 }

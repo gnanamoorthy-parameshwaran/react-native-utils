@@ -11,7 +11,7 @@ npm install react-native-utils
 ## Usage
 
 ```js
-import { multiply } from 'react-native-utils';
+import {multiply} from 'react-native-utils';
 
 // ...
 

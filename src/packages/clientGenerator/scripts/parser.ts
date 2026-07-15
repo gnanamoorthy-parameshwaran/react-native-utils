@@ -1,31 +1,31 @@
-import type { OpenAPI } from '../types/OpenAPISpec.ts';
+import type {OpenAPI} from '../types/OpenAPISpec.ts';
 
 class OpenAPIParser {
-  protected spec: OpenAPI;
+    protected spec: OpenAPI;
 
-  constructor(spec: OpenAPI) {
-    this.spec = spec;
-  }
+    constructor(spec: OpenAPI) {
+        this.spec = spec;
+    }
 
-  public getVersion() {
-    return this.spec.openapi;
-  }
+    public getVersion() {
+        return this.spec.openapi;
+    }
 
-  public getInfo() {
-    return this.spec.info;
-  }
+    public getInfo() {
+        return this.spec.info;
+    }
 
-  public getServers() {
-    return this.spec.servers;
-  }
+    public getServers() {
+        return this.spec.servers;
+    }
 
-  public getPaths() {
-    return this.spec.paths;
-  }
+    public getPaths() {
+        return this.spec.paths;
+    }
 
-  public getComponents() {
-    return this.spec.components;
-  }
+    public getComponents() {
+        return this.spec.components;
+    }
 }
 
 export default OpenAPIParser;

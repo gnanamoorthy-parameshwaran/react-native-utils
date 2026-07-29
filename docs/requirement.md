@@ -9,7 +9,7 @@ implementation.
 ## 1. Background
 
 - The package already ships `createAPI` (`src/packages/createAPI`): a factory,
-  `createAPI({ baseURL, cache, throwException, onBeforeRequest, onAfterResponse })`, whose
+  `createAPI({ baseURL, cache, throwException, onBeforeRequest, onAfterResponse, maxRetries })`, whose
   returned hook (`useAPI()`) exposes exactly `{ loading, request, invalidateCache }` — one
   generic `request<T>(options)` and one `loading` flag per hook call. This replaced an older
   `useAPI` shape (`Get/Post/Put/Patch/Delete` methods plus one loading flag per verb).

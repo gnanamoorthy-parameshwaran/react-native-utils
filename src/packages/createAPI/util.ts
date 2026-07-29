@@ -12,15 +12,21 @@ import {
 } from './exceptions';
 import type {FetchProps} from './types';
 
-export const prepareRequestBody = ({body}: {body: FetchProps['body']}) => {
-    if (body instanceof FormData) {
-        return body;
-    } else {
-        return body ? JSON.stringify(body) : undefined;
+export const parseResponseBody = async (response: Response): Promise<any> => {
+    if (response.status === 204 || response.status === 205) return undefined;
+    if (response.headers.get('Content-Length') === '0') return undefined;
+
+    const text = await response.text();
+    if (!text) return undefined;
+
+    try {
+        return JSON.parse(text);
+    } catch {
+        return text;
     }
 };
 
-export const validateAndThrowExceptions = ({response, result}: {response: Response; result: any}): void => {
+export const validateAndThrowExceptions = ({response, result}: {response: Response; result: any}): never => {
     switch (response.status) {
         case 400:
             throw new APIBadRequestError(result?.message);

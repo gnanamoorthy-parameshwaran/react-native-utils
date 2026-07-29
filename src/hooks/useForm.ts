@@ -6,9 +6,9 @@ import {Picker} from '@react-native-picker/picker';
 import {getDocumentAsync} from 'expo-document-picker';
 import type {DocumentPickerOptions} from 'expo-document-picker';
 
-import StringUtils from '@utils/StringUtils';
-import ValidationUtils from '@utils/ValidationUtils';
-import type {Rule} from '@utils/ValidationUtils';
+import StringUtils from '../utils/StringUtils';
+import ValidationUtils from '../utils/ValidationUtils';
+import type {Rule} from '../utils/ValidationUtils';
 
 type Rules<T> = {[K in keyof T]: Rule[]};
 

@@ -2289,6 +2289,47 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@gnanamoorthy/react-native-utils@workspace:.":
+  version: 0.0.0-use.local
+  resolution: "@gnanamoorthy/react-native-utils@workspace:."
+  dependencies:
+    "@commitlint/config-conventional": ^19.8.1
+    "@eslint/compat": ^1.3.2
+    "@eslint/eslintrc": ^3.3.1
+    "@eslint/js": ^9.35.0
+    "@evilmartians/lefthook": ^1.12.3
+    "@react-native-async-storage/async-storage": ^3.1.1
+    "@react-native-picker/picker": ^2.11.4
+    "@react-native/babel-preset": 0.81.1
+    "@react-native/eslint-config": ^0.81.1
+    "@react-navigation/native": ^7.3.4
+    "@release-it/conventional-changelog": ^10.0.1
+    "@types/jest": ^29.5.14
+    "@types/node": ^26.1.0
+    "@types/react": ^19.1.12
+    commitlint: ^19.8.1
+    del-cli: ^6.0.0
+    eslint: ^9.35.0
+    eslint-config-prettier: ^10.1.8
+    eslint-plugin-prettier: ^5.5.4
+    expo-document-picker: ~13.1.6
+    expo-image-picker: ~16.1.4
+    jest: ^29.7.0
+    prettier: ^3.6.2
+    react: 19.0.0
+    react-native: 0.79.6
+    react-native-builder-bob: ^0.40.13
+    react-native-paper: ^5.15.3
+    release-it: ^19.0.4
+    typescript: ^5.9.2
+  peerDependencies:
+    react: "*"
+    react-native: "*"
+  bin:
+    react-native-utils: ./lib/cli/scripts/cli.js
+  languageName: unknown
+  linkType: soft
+
 "@humanfs/core@npm:^0.19.2":
   version: 0.19.2
   resolution: "@humanfs/core@npm:0.19.2"
@@ -6529,12 +6570,12 @@ __metadata:
   languageName: node
   linkType: hard
 
-"expo-document-picker@npm:^56.0.4":
-  version: 56.0.4
-  resolution: "expo-document-picker@npm:56.0.4"
+"expo-document-picker@npm:~13.1.6":
+  version: 13.1.6
+  resolution: "expo-document-picker@npm:13.1.6"
   peerDependencies:
     expo: "*"
-  checksum: e2cc9692a539d09e6accc58bc06300d732207fc0f55c8290d5992e1130ba412819aa4ac15431757c815dffe377cfcfc495d1d57075ca17e19b9ddd3a2abdec70
+  checksum: 6c53a8ce9f9aa5f37815c8a748d49e6c985d4c099dc9b245f426a367f22cc953647c9cfd8375b882dcc428863fcb73bc9c374cb420305856e91bf413b6823417
   languageName: node
   linkType: hard
 
@@ -6560,23 +6601,23 @@ __metadata:
   languageName: node
   linkType: hard
 
-"expo-image-loader@npm:~56.0.3":
-  version: 56.0.3
-  resolution: "expo-image-loader@npm:56.0.3"
+"expo-image-loader@npm:~5.1.0":
+  version: 5.1.0
+  resolution: "expo-image-loader@npm:5.1.0"
   peerDependencies:
     expo: "*"
-  checksum: 3d9d43425d4959438c95fa59fdb80ed439bf6f76ada1af313a0ee5d1db4b5fa3cd7c9d2cc6d12ed3fda4d040fc645f0f34bf8a9bee582a9e5445024cb09220fb
+  checksum: dafd182e9cea5c6b81202f62d4016be51e5669e13f76e0a514b58b9c502c7366e5b5df02d600897e0d302acd1823eb5b2ca23a2c3f7242f173d2414caed42e1a
   languageName: node
   linkType: hard
 
-"expo-image-picker@npm:^56.0.18":
-  version: 56.0.18
-  resolution: "expo-image-picker@npm:56.0.18"
+"expo-image-picker@npm:~16.1.4":
+  version: 16.1.4
+  resolution: "expo-image-picker@npm:16.1.4"
   dependencies:
-    expo-image-loader: ~56.0.3
+    expo-image-loader: ~5.1.0
   peerDependencies:
     expo: "*"
-  checksum: d19012757452e72e8d7e6028656e2f41e1486a5ea54ec80d4a1ae150c88a50e866731efc7ee4a00aff26315ca5836639c6be9524a83adc87b6d289d6a5997d76
+  checksum: 66fc8c4724c7b8219645259de4d9e61353120398ef2339fd8a5225e0a13a26d4a9851edd6d230086e4ff0997754eea0387d9f5f191502fb64e34228a1e65e340
   languageName: node
   linkType: hard
 
@@ -10918,45 +10959,6 @@ __metadata:
     react-native-builder-bob: ^0.40.13
     react-native-monorepo-config: ^0.1.9
     react-native-web: ~0.20.0
-  languageName: unknown
-  linkType: soft
-
-"react-native-utils@workspace:.":
-  version: 0.0.0-use.local
-  resolution: "react-native-utils@workspace:."
-  dependencies:
-    "@commitlint/config-conventional": ^19.8.1
-    "@eslint/compat": ^1.3.2
-    "@eslint/eslintrc": ^3.3.1
-    "@eslint/js": ^9.35.0
-    "@evilmartians/lefthook": ^1.12.3
-    "@react-native-async-storage/async-storage": ^3.1.1
-    "@react-native-picker/picker": ^2.11.4
-    "@react-native/babel-preset": 0.81.1
-    "@react-native/eslint-config": ^0.81.1
-    "@react-navigation/native": ^7.3.4
-    "@release-it/conventional-changelog": ^10.0.1
-    "@types/jest": ^29.5.14
-    "@types/node": ^26.1.0
-    "@types/react": ^19.1.12
-    commitlint: ^19.8.1
-    del-cli: ^6.0.0
-    eslint: ^9.35.0
-    eslint-config-prettier: ^10.1.8
-    eslint-plugin-prettier: ^5.5.4
-    expo-document-picker: ^56.0.4
-    expo-image-picker: ^56.0.18
-    jest: ^29.7.0
-    prettier: ^3.6.2
-    react: 19.0.0
-    react-native: 0.79.6
-    react-native-builder-bob: ^0.40.13
-    react-native-paper: ^5.15.3
-    release-it: ^19.0.4
-    typescript: ^5.9.2
-  peerDependencies:
-    react: "*"
-    react-native: "*"
   languageName: unknown
   linkType: soft
 

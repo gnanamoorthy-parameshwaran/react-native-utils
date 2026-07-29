@@ -65,6 +65,7 @@
         "@types/node": "^26.1.0",
         "@types/react": "^19.1.12",
         "commitlint": "^19.8.1",
+        "conventional-changelog-angular": "^8.3.1",
         "del-cli": "^6.0.0",
         "eslint": "^9.35.0",
         "eslint-config-prettier": "^10.1.8",
@@ -116,7 +117,8 @@
             "@release-it/conventional-changelog": {
                 "preset": {
                     "name": "angular"
-                }
+                },
+                "infile": "CHANGELOG.md"
             }
         }
     },

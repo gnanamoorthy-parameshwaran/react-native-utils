@@ -1,5 +1,7 @@
 # Changelog
 
+## [1.0.8](https://github.com/gnanamoorthy-parameshwaran/react-native-utils/compare/v0.2.1...v1.0.8) (2026-07-29)
+
 ## [0.2.1](https://github.com/gnanamoorthy-parameshwaran/react-native-utils/compare/v0.2.0...v0.2.1) (2026-07-29)
 
 # [0.2.0](https://github.com/gnanamoorthy-parameshwaran/react-native-utils/compare/v1.0.7...v0.2.0) (2026-07-29)

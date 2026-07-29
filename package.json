@@ -1,6 +1,6 @@
 {
     "name": "@gnanamoorthy/react-native-utils",
-    "version": "1.0.7",
+    "version": "1.0.8",
     "description": "Used to store the common utilities for react native app",
     "main": "./lib/module/index.js",
     "types": "./lib/typescript/src/index.d.ts",

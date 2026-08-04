@@ -46,12 +46,53 @@ export default class OperationParser {
         const schemaGroups = new Map<string, string>();
         Object.keys(schemas).forEach(key => schemaGroups.set(key, this.naming.schemaGroupName(key)));
 
+        const operations = this.parseOperations();
+        this.deconflictResponseTypeNames(operations);
+
         return {
             info: this.spec.info,
-            operations: this.parseOperations(),
+            operations,
             schemas,
             schemaGroups,
         };
+    }
+
+    /**
+     * One type file holds a whole resource group, so two operations in it can want
+     * the same `{Method}Response` name for different payloads -- e.g. `getExpenses`
+     * on both `/vehicles/{vehicle}/expenses` and `/business-units/{businessUnit}/expenses`,
+     * where only the latter carries a `meta`. Those get qualified by the client
+     * folder that already keeps them in separate files, so neither declaration is
+     * lost and every client file still names the type its own operation returns.
+     */
+    private deconflictResponseTypeNames(operations: ResolvedOperation[]) {
+        const buckets = new Map<string, ResolvedOperation[]>();
+        operations.forEach(operation => {
+            const key = `${operation.resource}.${operation.responseTypeName}`;
+            const bucket = buckets.get(key) ?? [];
+            bucket.push(operation);
+            buckets.set(key, bucket);
+        });
+
+        buckets.forEach(members => {
+            const shapes = new Set(members.map(member => member.response.text));
+            if (shapes.size < 2) return;
+
+            const takenBy = new Map<string, string>();
+            members.forEach(member => {
+                const qualified = `${StringUtil.pascalCase(member.folder)}${member.responseTypeName}`;
+                let name = qualified;
+                let suffix = 2;
+                // Two operations may share a folder as well as a name; keep numbering
+                // until the name is either free or already stands for this same shape.
+                while ((takenBy.get(name) ?? member.response.text) !== member.response.text) {
+                    name = `${qualified}${suffix}`;
+                    suffix += 1;
+                }
+                takenBy.set(name, member.response.text);
+                member.responseTypeName = name;
+            });
+        });
     }
 
     private parseOperations(): ResolvedOperation[] {
@@ -90,7 +131,8 @@ export default class OperationParser {
             methodParams,
             queryParams,
             requestBody: this.requestBodies.resolve(operation, methodPascal),
-            responseInner: this.responses.resolve(operation),
+            response: this.responses.resolve(operation),
+            responseTypeName: `${methodPascal}Response`,
             cache: this.cache.resolve(method, operation, queryParams),
             docs: this.docs.resolve(operation),
         };

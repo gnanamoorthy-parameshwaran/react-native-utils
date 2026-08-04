@@ -9,7 +9,12 @@ function isReference(value: object): value is Reference {
 export default class ResponseResolver {
     constructor(protected typeResolver: TypeResolver) {}
 
-    /** Resolves the `data` payload of the `{ data: T }` envelope, or the raw schema when there's no envelope. */
+    /**
+     * Resolves the success response schema as-is -- the whole body, not just its
+     * `data` property. Unwrapping to `data` would drop the envelope's siblings
+     * (`meta.token` on login, pagination `meta`/`links` on lists), so the response
+     * type has to describe the full payload the caller actually receives.
+     */
     public resolve(operation: Operation): ResolvedType {
         const responses = operation.responses;
         const success = responses['200'] ?? responses['201'] ?? responses.default;
@@ -21,11 +26,6 @@ export default class ResponseResolver {
         const json = success.content['application/json'];
         const schema = json?.schema;
         if (!schema) return {text: 'null', refs: new Set()};
-
-        if (!isReference(schema) && schema.type === 'object') {
-            const dataSchema = schema.properties?.data;
-            if (dataSchema) return this.typeResolver.resolve(dataSchema);
-        }
 
         return this.typeResolver.resolve(schema);
     }

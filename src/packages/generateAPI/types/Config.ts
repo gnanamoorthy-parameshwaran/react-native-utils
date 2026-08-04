@@ -16,7 +16,7 @@ export type ClientGeneratorConfig = {
     useAPIImportPath: string;
     /** Where generated client hook files are written, relative to this config file. Files go directly under this path (e.g. clientOutputDir/{version}/{folder}/use{Resource}.ts) -- no extra "clients" subfolder is added. */
     clientOutputDir: string;
-    /** Where generated TS type files (including the shared index.ts) are written, relative to this config file. Files go directly under this path -- no extra "types" subfolder is added. */
+    /** Where generated TS type files (one per resource group) are written, relative to this config file. Files go directly under this path -- no extra "types" subfolder is added. */
     typeOutputDir: string;
     /**
      * Shell command run once generation finishes, with `clientOutputDir` and

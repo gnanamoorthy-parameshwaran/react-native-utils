@@ -5,7 +5,6 @@ import ParameterResolver from '../../resolvers/ParameterResolver.ts';
 import TypeResolver from '../../resolvers/TypeResolver.ts';
 import DocUtil from '../../support/DocUtil.ts';
 import OperationGrouper from '../../support/OperationGrouper.ts';
-import StringUtil from '../../support/StringUtil.ts';
 import type {FrameworkGenerator, GeneratedFile} from '../../contracts/FrameworkGenerator.ts';
 import type {ClientGeneratorConfig} from '../../types/Config.ts';
 import type {HttpMethodKey, ParsedAPI, ResolvedOperation} from '../../types/ResolvedOperation.ts';
@@ -193,8 +192,7 @@ export default class ReactClientGenerator implements FrameworkGenerator {
         }
 
         const hookParamNames = operation.hookParams.map(param => param.name);
-        const methodPascal = StringUtil.pascalCase(operation.methodName);
-        const responseTypeName = `${methodPascal}Response`;
+        const responseTypeName = operation.responseTypeName;
         const endpoint = operation.pathTemplate.replace(/\{([^}]+)\}/g, (_match, name: string) => '${' + name + '}');
         const requestName = `${operation.methodName}Request`;
         const httpMethodKey = operation.httpMethod.toLowerCase() as HttpMethodKey;

@@ -45,8 +45,10 @@ export type ResolvedOperation = {
     methodParams: ResolvedParam[];
     queryParams: ResolvedQueryParam[];
     requestBody?: ResolvedRequestBody;
-    /** The unwrapped `data` payload type of the response (before ResponseSuccessType<T> wrapping). */
-    responseInner: {text: string; refs: Set<string>};
+    /** The full success response type, envelope included -- `{ data: ..., meta: ... }`, not just the `data` payload. */
+    response: {text: string; refs: Set<string>};
+    /** Name of the generated type for `response`, e.g. `GetExpensesResponse` -- assigned centrally so type files and client files can't disagree about it. */
+    responseTypeName: string;
     /** From the operation's `x-cache-config` extension. Only ever set on GET operations without query params -- caching a paginated list isn't supported yet. */
     cache?: ResolvedCache;
     docs: ResolvedDocs;

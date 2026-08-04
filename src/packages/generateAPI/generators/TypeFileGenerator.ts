@@ -1,6 +1,5 @@
 import TypeResolver from '../resolvers/TypeResolver.ts';
 import DocUtil from '../support/DocUtil.ts';
-import StringUtil from '../support/StringUtil.ts';
 import type {GeneratedFile} from '../contracts/FrameworkGenerator.ts';
 import type {ClientGeneratorConfig} from '../types/Config.ts';
 import type {ParsedAPI} from '../types/ResolvedOperation.ts';
@@ -9,10 +8,9 @@ type SynthesizedType = {name: string; text: string; refs: Set<string>};
 type SchemaGroup = {schemaKeys: string[]; synthesized: SynthesizedType[]};
 
 /**
- * Emits the TS type files: the shared index.ts plus one file per schema group
- * (Contact.ts holds BaseContactResource, UpdateContactRequest, synthesized
- * response/body types, ...). Types are framework-neutral, so every framework
- * driver shares this output.
+ * Emits one TS type file per schema group (Contact.ts holds BaseContactResource,
+ * UpdateContactRequest, synthesized response/body types, ...). Types are
+ * framework-neutral, so every framework driver shares this output.
  */
 export default class TypeFileGenerator {
     protected typeResolver = new TypeResolver();
@@ -23,15 +21,7 @@ export default class TypeFileGenerator {
     ) {}
 
     public generate(): GeneratedFile[] {
-        return [this.sharedTypesFile(), ...this.typeFiles()];
-    }
-
-    private sharedTypesFile(): GeneratedFile {
-        return {
-            name: 'index.ts',
-            content: `/** Success envelope: the API wraps every payload in \`{ data: T }\`. */\nexport type ResponseSuccessType<T> = { data: T };\n`,
-            directory: this.config.typeOutputDir,
-        };
+        return this.typeFiles();
     }
 
     private typeFiles(): GeneratedFile[] {
@@ -51,11 +41,10 @@ export default class TypeFileGenerator {
 
         this.parsed.operations.forEach(operation => {
             const group = getGroup(operation.resource);
-            const responseName = `${StringUtil.pascalCase(operation.methodName)}Response`;
             this.addSynthesized(group, {
-                name: responseName,
-                text: `ResponseSuccessType<${operation.responseInner.text}>`,
-                refs: operation.responseInner.refs,
+                name: operation.responseTypeName,
+                text: operation.response.text,
+                refs: operation.response.refs,
             });
 
             if (operation.requestBody?.inlineType) {
@@ -90,7 +79,6 @@ export default class TypeFileGenerator {
         const ownKeys = new Set(group.schemaKeys);
         const refs = new Set<string>();
         const bodyParts: string[] = [];
-        let usesResponseWrapper = false;
 
         group.schemaKeys.forEach(key => {
             const schema = this.parsed.schemas[key];
@@ -105,7 +93,6 @@ export default class TypeFileGenerator {
 
         group.synthesized.forEach(entry => {
             entry.refs.forEach(ref => refs.add(ref));
-            if (entry.text.startsWith('ResponseSuccessType<')) usesResponseWrapper = true;
             bodyParts.push(`export type ${entry.name} = ${entry.text};`);
         });
 
@@ -120,9 +107,6 @@ export default class TypeFileGenerator {
         });
 
         const importLines: string[] = [];
-        if (usesResponseWrapper) {
-            importLines.push(`import type { ResponseSuccessType } from './index';`);
-        }
         importsByGroup.forEach((names, targetGroup) => {
             importLines.push(`import type { ${[...names].join(', ')} } from './${targetGroup}';`);
         });

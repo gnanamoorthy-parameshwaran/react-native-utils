@@ -60,10 +60,19 @@ implementation.
   `UpdateContactRequest` both belong to the `Contact` group and are written to one file.
 - One TypeScript file per resource group, containing the original schema types **and** synthesized
   request/response types for that resource's operations.
-- Every operation gets a generated `{Method}Response` type, expressed as
-  `ResponseSuccessType<T>`, where `T` is the unwrapped `data` payload of the response envelope
-  (or the raw schema if there's no `{ data: ... }` envelope, or `null` for a no-content response).
-- `ResponseSuccessType<T> = { data: T }` is a single shared type, written once.
+- Every operation gets a generated `{Method}Response` type describing the **whole** success
+  response body — the envelope included, not just its `data` property (`null` for a no-content
+  response). An earlier version unwrapped `data` and re-wrapped it in a shared
+  `ResponseSuccessType<T> = { data: T }`; that dropped every sibling of `data`, so `login`'s
+  `meta.token` and list endpoints' pagination `meta` were missing from the response types. There
+  is no shared wrapper type any more.
+- Because one type file covers a whole resource group, two operations in it can want the same
+  `{Method}Response` name for **different** payloads — e.g. `getExpenses` on both
+  `/vehicles/{vehicle}/expenses` and `/business-units/{businessUnit}/expenses`, where only the
+  latter carries a `meta`. Those are qualified by the client folder that already keeps them in
+  separate files (`VehicleBusinessUnitGetExpensesResponse` / `BusinessUnitBusinessUnitGetExpensesResponse`). The name is
+  assigned once on the IR (`ResolvedOperation.responseTypeName`) so the type file and the client
+  file that imports it can't disagree about it.
 
 ### 2.5 Client (hook) generation
 
@@ -143,8 +152,7 @@ implementation.
 - Files are written **directly** under each configured directory — no extra `clients`/`types`
   folder segment:
     - Client files: `{clientOutputDir}/{version}/{folder}/use{Resource}.ts`.
-    - Type files: `{typeOutputDir}/{Resource}.ts`, plus a shared `{typeOutputDir}/index.ts` for
-      `ResponseSuccessType<T>`.
+    - Type files: `{typeOutputDir}/{Resource}.ts`, one per resource group.
 - Because the two directories are independently configurable (not both nested under one root),
   the relative import from a client file to its types is computed dynamically
   (`path.relative`) rather than assumed at a fixed depth.
@@ -162,12 +170,12 @@ src/packages/generateAPI/
 ├── contracts/
 │   └── FrameworkGenerator.ts         # generator contract (+ GeneratedFile, GeneratorContext/Factory for custom modules)
 ├── parsers/
-│   └── OperationParser.ts            # walks every path/method, runs the resolvers -> ParsedAPI IR
+│   └── OperationParser.ts            # walks every path/method, runs the resolvers, deconflicts response type names -> ParsedAPI IR
 ├── resolvers/                        # one class per concern, spec -> IR only, no code emission
 │   ├── NamingResolver.ts            # operationId/tags/path -> version/folder/resource/method names
 │   ├── ParameterResolver.ts          # path/query params, hook-vs-method split + group reconciliation
 │   ├── RequestBodyResolver.ts        # JSON / multipart body -> usable type expression
-│   ├── ResponseResolver.ts           # unwraps the { data: T } envelope
+│   ├── ResponseResolver.ts           # success response schema -> response type (full envelope)
 │   ├── CacheResolver.ts             # x-cache-config vendor extension
 │   ├── DocResolver.ts               # summary/description/deprecation/tag docs
 │   └── TypeResolver.ts              # OpenAPI Schema -> TS type text ($ref/array/enum/union/nullable-aware)
@@ -218,9 +226,8 @@ touching this package at all (§2.7) — nothing on the parsing side changes eit
 2. `resolveDriver()` picks the generator from `config.framework`: a built-in driver class, or a
    user module loaded with dynamic `import()` and called as a factory with the
    `GeneratorContext` (§2.7).
-3. The generator's `generate()` returns every file to write. The built-in React driver emits the
-   shared `${typeOutputDir}/index.ts` (`ResponseSuccessType<T>`) and one type file per resource
-   group via `TypeFileGenerator`, then groups operations by `(version, folder, resource)`
+3. The generator's `generate()` returns every file to write. The built-in React driver emits one
+   type file per resource group via `TypeFileGenerator`, then groups operations by `(version, folder, resource)`
    (`OperationGrouper`), reconciles each group's path params
    (`ParameterResolver.reconcileForGroup`), and assembles one client hook file per group.
 4. `FileBuilder` writes every generated file relative to the config's directory.
@@ -258,14 +265,14 @@ alongside the normal `bob build`.
 import React from 'react';
 import useAPI from '../../../../hooks/useAPI';
 import {getCacheKey} from '@gnanamoorthy/react-native-utils';
-import type {GetExpensesResponse, CreateExpenseResponse, UpdateExpenseRequest} from '../../../types/Expense';
+import type {BusinessUnitGetExpensesResponse, CreateExpenseResponse, UpdateExpenseRequest} from '../../../types/Expense';
 
 export default function useExpense({businessUnit}: {businessUnit: number}) {
     const {loading: gettingExpenses, request: getExpensesRequest, invalidateCache: invalidateExpensesCache} = useAPI();
     const {loading: postingExpense, request: createExpenseRequest} = useAPI();
 
     const getExpenses = React.useCallback(() => {
-        return getExpensesRequest<GetExpensesResponse>({
+        return getExpensesRequest<BusinessUnitGetExpensesResponse>({
             method: 'GET',
             endpoint: `/v1/business-units/${businessUnit}/expenses`,
             cacheConfig: {

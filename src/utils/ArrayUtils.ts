@@ -5,13 +5,17 @@ class ArrayUtils {
      * @param property The property to group by.
      * @returns An object where the keys are the property values, and the values are arrays of objects with that property.
      */
-    static groupBy<T extends Record<string, any>>(array: T[], property: keyof T): Record<string, T[]> {
+    static groupBy<T extends Record<string, any>>(array: T[], property: string): Record<string, T[]> {
+        const getValue = (obj: any, path: string) => path.split('.').reduce((acc, key) => acc?.[key], obj);
+
         return array.reduce(
             (result, item) => {
-                const key = item[property] as string;
+                const key = getValue(item, property);
+
                 if (!result[key]) {
                     result[key] = [];
                 }
+
                 result[key].push(item);
                 return result;
             },
@@ -87,12 +91,12 @@ class ArrayUtils {
         const grouped = sorted.reduce(
             (acc, item) => {
                 const dateObj = new Date(item[dateField] as string);
-                const dateKey = useFormattedDate ? formatter.format(dateObj) : (dateObj.toISOString().split('T')[0] ?? dateObj.toISOString());
+                const dateKey = (useFormattedDate ? formatter.format(dateObj) : dateObj.toISOString().split('T')[0]) as string;
 
                 if (!acc[dateKey]) {
                     acc[dateKey] = [];
                 }
-                acc[dateKey].push(item);
+                acc[dateKey]?.push(item);
                 return acc;
             },
             {} as Record<string, T[]>,

@@ -15,7 +15,25 @@ export default class DateUtils {
             ss: String(d.getSeconds()).padStart(2, '0'),
         };
 
-        return format.replace(/YYYY|MM|DD|HH|mm|ss/g, match => map[match] ?? match);
+        return format.replace(/YYYY|MM|DD|HH|mm|ss/g, match => map[match] ?? '');
+    }
+
+    /**
+     * Formats a date using the Intl.DateTimeFormat API.
+     * @param param0 - An object containing the date, locale, and formatting options.
+     * @returns A formatted date string.
+     */
+    static format({
+        date,
+        locale = 'default',
+        options = {dateStyle: 'long', timeStyle: 'medium'},
+    }: {
+        date: Date | string;
+        locale?: string;
+        options?: Intl.DateTimeFormatOptions;
+    }): string {
+        const d = typeof date === 'string' ? new Date(date) : date;
+        return new Intl.DateTimeFormat(locale, options).format(d);
     }
 
     /**

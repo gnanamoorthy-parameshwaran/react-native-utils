@@ -1,5 +1,12 @@
 # Changelog
 
+# [1.2.0](https://github.com/gnanamoorthy-parameshwaran/react-native-utils/compare/v1.1.0...v1.2.0) (2026-08-30)
+
+
+### Features
+
+* **createAPI:** adds support for global error handler(onError) ([64dad5f](https://github.com/gnanamoorthy-parameshwaran/react-native-utils/commit/64dad5fbccb4b891da06668ae29c7f4e90eb366f))
+
 # [1.1.0](https://github.com/gnanamoorthy-parameshwaran/react-native-utils/compare/v1.0.8...v1.1.0) (2026-08-04)
 
 

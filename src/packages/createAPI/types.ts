@@ -11,6 +11,8 @@ export type OnBeforeResultProps = {response: Response; emitEvent: EmitEvent};
 export type OnBeforeRequest = (props: OnBeforeRequestProps) => Promise<Omit<OnBeforeRequestProps, 'emitEvent'>>;
 export type OnAfterResponse = (props: OnAfterResponseProps) => Promise<Response>;
 export type OnBeforeResult<T = any> = (props: OnBeforeResultProps) => Promise<T>;
+export type OnErrorProps = {error: unknown; url: string; options: FetchProps; response?: Response; emitEvent: EmitEvent};
+export type OnError = (props: OnErrorProps) => Promise<void> | void;
 
 export type CacheStorage = {
     get(key: string): Promise<string | null>;
@@ -24,6 +26,7 @@ export type CreateAPIProps = {
     throwException?: boolean;
     onBeforeRequest?: OnBeforeRequest;
     onAfterResponse?: OnAfterResponse;
+    onError?: OnError;
     cache?: APICacheDriver;
     maxRetries?: number;
 };

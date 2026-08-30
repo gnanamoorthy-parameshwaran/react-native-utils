@@ -13,6 +13,7 @@ export default function createAPI({
     cache = new MemoryCacheDriver(),
     onBeforeRequest,
     onAfterResponse,
+    onError,
     maxRetries = 1,
 }: CreateAPIProps) {
     return ({loadInitially = false}: {loadInitially?: boolean} = {}) => {
@@ -24,6 +25,8 @@ export default function createAPI({
             const method = options.method ?? 'GET';
             const url = baseURL + options.endpoint;
             const retryLimit = options.maxRetries ?? maxRetries;
+
+            let response: Response | undefined;
 
             try {
                 const cacheEntry = options.cacheConfig
@@ -44,21 +47,22 @@ export default function createAPI({
                     if (onBeforeRequest) ({headers} = await onBeforeRequest({headers, emitEvent}));
                     if (options.onBeforeRequest) ({headers} = await options.onBeforeRequest({headers, emitEvent}));
 
-                    let response = await fetch(url, {method, headers, signal: options.signal, body});
+                    let attemptResponse = await fetch(url, {method, headers, signal: options.signal, body});
 
                     const retry: Retry = async retryOptions => {
-                        if (attempt >= retryLimit) return response;
+                        if (attempt >= retryLimit) return attemptResponse;
                         attempt += 1;
                         return send(retryOptions);
                     };
 
-                    if (onAfterResponse) response = await onAfterResponse({response, emitEvent, retry, attempt});
-                    if (options.onAfterResponse) response = await options.onAfterResponse({response, emitEvent, retry, attempt});
+                    if (onAfterResponse) attemptResponse = await onAfterResponse({response: attemptResponse, emitEvent, retry, attempt});
+                    if (options.onAfterResponse)
+                        attemptResponse = await options.onAfterResponse({response: attemptResponse, emitEvent, retry, attempt});
 
-                    return response;
+                    return attemptResponse;
                 };
 
-                const response = await send();
+                response = await send();
                 const result = options.onBeforeResult ? await options.onBeforeResult({response, emitEvent}) : await parseResponseBody(response);
 
                 if (response.ok) {
@@ -68,6 +72,9 @@ export default function createAPI({
 
                 if (throwException) validateAndThrowExceptions({response, result});
                 return result as T;
+            } catch (error) {
+                if (onError) await onError({error, url, options, response, emitEvent});
+                throw error;
             } finally {
                 setLoading(false);
             }

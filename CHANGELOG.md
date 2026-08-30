@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.1](https://github.com/gnanamoorthy-parameshwaran/react-native-utils/compare/v1.2.0...v1.2.1) (2026-08-30)
+
+
+### Bug Fixes
+
+* **createAPI:** fixes missing APIContext, Its wrapper exports ([5f71ed6](https://github.com/gnanamoorthy-parameshwaran/react-native-utils/commit/5f71ed62ef85218284d1471fc69e4bee991b9666))
+
 # [1.2.0](https://github.com/gnanamoorthy-parameshwaran/react-native-utils/compare/v1.1.0...v1.2.0) (2026-08-30)
 
 

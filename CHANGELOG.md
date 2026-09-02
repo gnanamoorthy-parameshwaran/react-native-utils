@@ -1,5 +1,13 @@
 # Changelog
 
+# [1.3.0](https://github.com/gnanamoorthy-parameshwaran/react-native-utils/compare/v1.2.1...v1.3.0) (2026-09-02)
+
+
+### Features
+
+* **createAPI:** add exception classes for the full HTTP error status range ([bbd1a26](https://github.com/gnanamoorthy-parameshwaran/react-native-utils/commit/bbd1a269d7d07a07e2a4bb6e0055e1afe63dc0e1))
+* **createAPI:** support paginated GET caching and tag-based group invalidation ([8c1c161](https://github.com/gnanamoorthy-parameshwaran/react-native-utils/commit/8c1c161d4b7f2d4bdeec6d6eeac8c5ada96733c3))
+
 ## [1.2.1](https://github.com/gnanamoorthy-parameshwaran/react-native-utils/compare/v1.2.0...v1.2.1) (2026-08-30)
 
 

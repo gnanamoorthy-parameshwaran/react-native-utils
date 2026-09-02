@@ -2,6 +2,7 @@ import React from 'react';
 
 import APIContext from './context/APIContext';
 import MemoryCacheDriver from './drivers/MemoryCacheDriver';
+import TaggedCacheDriver from './drivers/TaggedCacheDriver';
 
 import {getCacheKey, parseResponseBody, validateAndThrowExceptions} from './util';
 
@@ -10,12 +11,13 @@ import type {CreateAPIProps, FetchProps, RequestBody, Retry} from './types';
 export default function createAPI({
     baseURL,
     throwException,
-    cache = new MemoryCacheDriver(),
+    cache: cacheDriver = new MemoryCacheDriver(),
     onBeforeRequest,
     onAfterResponse,
     onError,
     maxRetries = 1,
 }: CreateAPIProps) {
+    const cache = new TaggedCacheDriver(cacheDriver);
     return ({loadInitially = false}: {loadInitially?: boolean} = {}) => {
         const {emitEvent} = React.useContext(APIContext);
         const [loading, setLoading] = React.useState<boolean>(loadInitially);
@@ -66,7 +68,7 @@ export default function createAPI({
                 const result = options.onBeforeResult ? await options.onBeforeResult({response, emitEvent}) : await parseResponseBody(response);
 
                 if (response.ok) {
-                    if (cacheEntry) await cache.set(cacheEntry.key, result, cacheEntry.ttl);
+                    if (cacheEntry) await cache.set(cacheEntry.key, result, cacheEntry.ttl, options.cacheConfig?.tags);
                     return result as T;
                 }
 
@@ -88,6 +90,10 @@ export default function createAPI({
             }
         };
 
-        return {loading, request, invalidateCache};
+        const invalidateCacheGroup = async (tag: string) => {
+            await cache.invalidateTag(tag);
+        };
+
+        return {loading, request, invalidateCache, invalidateCacheGroup};
     };
 }

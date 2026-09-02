@@ -5,6 +5,7 @@ import ParameterResolver from '../../resolvers/ParameterResolver.ts';
 import TypeResolver from '../../resolvers/TypeResolver.ts';
 import DocUtil from '../../support/DocUtil.ts';
 import OperationGrouper from '../../support/OperationGrouper.ts';
+import StringUtil from '../../support/StringUtil.ts';
 import type {FrameworkGenerator, GeneratedFile} from '../../contracts/FrameworkGenerator.ts';
 import type {ClientGeneratorConfig} from '../../types/Config.ts';
 import type {HttpMethodKey, ParsedAPI, ResolvedOperation} from '../../types/ResolvedOperation.ts';
@@ -57,6 +58,25 @@ export default class ReactClientGenerator implements FrameworkGenerator {
             returnItems.push(built.loadingName, ...built.methodNames);
             usesCache = usesCache || built.usesCache;
         });
+
+        // Cache tags cut across operations (a mutation invalidates a list's cache
+        // regardless of which operation populated it), so the group-invalidate
+        // helper is emitted once per unique tag for the whole file, not per
+        // operation -- one extra `useAPI()` call sources the shared
+        // `invalidateCacheGroup`, since every instance closes over the same
+        // underlying cache created once by `createAPI()`.
+        const cacheTags = new Set<string>();
+        group.forEach(operation => operation.cache?.tags?.forEach(tag => cacheTags.add(tag)));
+        if (cacheTags.size > 0) {
+            hookLines.push('    const { invalidateCacheGroup } = useAPI();');
+            cacheTags.forEach(tag => {
+                const groupName = `invalidate${StringUtil.pascalCase(tag)}Group`;
+                callbackCodes.push(
+                    `${DocUtil.block([`Invalidates every cached response tagged \`${tag}\`, across every pagination page and filter combination.`], '    ')}\n    const ${groupName} = React.useCallback(() => {\n        return invalidateCacheGroup('${tag}');\n    }, [invalidateCacheGroup]);`,
+                );
+                returnItems.push(groupName);
+            });
+        }
 
         const clientDirectory = `${this.config.clientOutputDir}/${first.version}/${first.folder}`;
         // clientOutputDir and typeOutputDir are independent config paths (no longer
@@ -202,7 +222,10 @@ export default class ReactClientGenerator implements FrameworkGenerator {
         const invalidateSuffix = this.naming.loadingSuffix(operation.methodName);
         const loadingName = this.naming.loadingName(httpMethodKey, operation.methodName);
         const invalidateName = `invalidate${invalidateSuffix}Cache`;
-        const cacheKeyExpr = `getCacheKey({ method: 'GET', endpoint: \`${endpoint}\` })`;
+        // Query params are folded into the same endpoint template the request
+        // itself uses, so e.g. `?page=1` and `?page=2` resolve to distinct cache
+        // keys instead of colliding on one paginated-list entry.
+        const cacheKeyExpr = `getCacheKey({ method: 'GET', endpoint: \`${endpoint}${hasQuery ? '${query}' : ''}\` })`;
 
         const hookLine = operation.cache
             ? `    const { loading: ${loadingName}, request: ${requestName}, invalidateCache: ${invalidateName} } = useAPI();`
@@ -251,15 +274,18 @@ export default class ReactClientGenerator implements FrameworkGenerator {
         lines.push(`            method: '${operation.httpMethod}',`, `            endpoint: \`${endpoint}${hasQuery ? '${query}' : ''}\`,`);
         if (requestBodyLine) lines.push(requestBodyLine);
         if (operation.cache) {
-            lines.push(`            cacheConfig: { ttl: ${operation.cache.ttl}, key: ${cacheKeyExpr} },`);
+            const tagsExpr = operation.cache.tags ? `, tags: ${JSON.stringify(operation.cache.tags)}` : '';
+            lines.push(`            cacheConfig: { ttl: ${operation.cache.ttl}, key: ${cacheKeyExpr}${tagsExpr} },`);
         }
         lines.push(`        });`);
         lines.push(`    }, [${[requestName, ...hookParamNames].join(', ')}]);`);
 
         if (operation.cache) {
-            // `cache` is only ever set for GETs with no query params, so `fields`
-            // here holds at most this resource's own id -- enough to recompute the
-            // same cache key the getter used.
+            // Recomputes the exact same cache key the getter used (path params
+            // and, when present, the same sorted query string), so this only
+            // clears the one variant matching the params passed here. For a
+            // cached list, clearing every cached page/filter combination at
+            // once needs the tag-based group-invalidate helper instead.
             lines.push('');
             lines.push(
                 DocUtil.block(
@@ -268,6 +294,9 @@ export default class ReactClientGenerator implements FrameworkGenerator {
                 ),
             );
             lines.push(`    const invalidate${invalidateSuffix} = React.useCallback((${objectParam}) => {`);
+            if (hasQuery) {
+                lines.push(`        const query = params ? \`?\${new URLSearchParams(params as Record<string, string>).toString()}\` : '';`);
+            }
             lines.push(`        return ${invalidateName}(${cacheKeyExpr});`);
             lines.push(`    }, [${[invalidateName, ...hookParamNames].join(', ')}]);`);
         }

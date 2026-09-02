@@ -133,7 +133,7 @@ export default class OperationParser {
             requestBody: this.requestBodies.resolve(operation, methodPascal),
             response: this.responses.resolve(operation),
             responseTypeName: `${methodPascal}Response`,
-            cache: this.cache.resolve(method, operation, queryParams),
+            cache: this.cache.resolve(method, operation),
             docs: this.docs.resolve(operation),
         };
     }

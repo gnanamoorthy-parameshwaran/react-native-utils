@@ -51,6 +51,20 @@ export const validateAndThrowExceptions = ({response, result}: {response: Respon
     }
 };
 
-export function getCacheKey({method = 'GET', endpoint}: {method: FetchProps['method']; endpoint: string}): string {
-    return `${method}:${endpoint}`;
+export function getCacheKey({
+    method = 'GET',
+    endpoint,
+    query,
+}: {
+    method: FetchProps['method'];
+    endpoint: string;
+    query?: Record<string, string>;
+}): string {
+    if (!query || Object.keys(query).length === 0) return `${method}:${endpoint}`;
+
+    const sorted = Object.keys(query)
+        .sort()
+        .map(key => `${key}=${query[key]}`)
+        .join('&');
+    return `${method}:${endpoint}?${sorted}`;
 }

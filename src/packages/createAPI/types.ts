@@ -1,5 +1,5 @@
 export type RequestBody = string | FormData | null;
-export type CacheConfig = {key?: string; ttl: number};
+export type CacheConfig = {key?: string; ttl: number; tags?: string[]};
 export type CacheEntry = {value: unknown; expiresAt: number};
 export type RetryOptions = {headers?: Headers; body?: RequestBody};
 

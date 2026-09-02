@@ -281,15 +281,30 @@ export default class ReactClientGenerator implements FrameworkGenerator {
         lines.push(`    }, [${[requestName, ...hookParamNames].join(', ')}]);`);
 
         if (operation.cache) {
-            // Recomputes the exact same cache key the getter used (path params
-            // and, when present, the same sorted query string), so this only
-            // clears the one variant matching the params passed here. For a
-            // cached list, clearing every cached page/filter combination at
-            // once needs the tag-based group-invalidate helper instead.
+            const tags = operation.cache.tags ?? [];
+            // A query-parameterized GET caches one entry per params combination, so
+            // clearing only the key for the params passed here would leave every
+            // other cached page/filter stale. When such an operation declares tags,
+            // its own invalidate helper also clears the whole tagged group, so a
+            // single call after a mutation drops every cached variant rather than
+            // just the one in hand. A GET with no query params needs no group clear:
+            // its exact key already covers everything that could be stale for it.
+            const invalidatesGroup = hasQuery && tags.length > 0;
+
             lines.push('');
             lines.push(
                 DocUtil.block(
-                    [`Invalidates the cached ${endpointDoc} response so the next \`${operation.methodName}\` call refetches.`, '', ...paramTags],
+                    [
+                        `Invalidates the cached ${endpointDoc} response so the next \`${operation.methodName}\` call refetches.`,
+                        ...(invalidatesGroup
+                            ? [
+                                  '',
+                                  `Also clears every cached response tagged ${tags.map(tag => `\`${tag}\``).join(', ')} -- every page and filter combination, not just the params passed here.`,
+                              ]
+                            : []),
+                        '',
+                        ...paramTags,
+                    ],
                     '    ',
                 ),
             );
@@ -297,8 +312,16 @@ export default class ReactClientGenerator implements FrameworkGenerator {
             if (hasQuery) {
                 lines.push(`        const query = params ? \`?\${new URLSearchParams(params as Record<string, string>).toString()}\` : '';`);
             }
-            lines.push(`        return ${invalidateName}(${cacheKeyExpr});`);
-            lines.push(`    }, [${[invalidateName, ...hookParamNames].join(', ')}]);`);
+            if (invalidatesGroup) {
+                lines.push(`        return Promise.all([`);
+                lines.push(`            ${invalidateName}(${cacheKeyExpr}),`);
+                tags.forEach(tag => lines.push(`            invalidateCacheGroup('${tag}'),`));
+                lines.push(`        ]);`);
+            } else {
+                lines.push(`        return ${invalidateName}(${cacheKeyExpr});`);
+            }
+            const invalidateDeps = [invalidateName, ...(invalidatesGroup ? ['invalidateCacheGroup'] : []), ...hookParamNames];
+            lines.push(`    }, [${invalidateDeps.join(', ')}]);`);
         }
 
         const typeRefs: {name: string; group: string}[] = [{name: responseTypeName, group: operation.resource}];

@@ -95,4 +95,32 @@ describe('generated cache key + tag-group invalidation wiring', () => {
         const goalsBlock = content.slice(content.indexOf('getGoals ='));
         expect(goalsBlock).not.toContain('cacheConfig');
     });
+
+    describe("the paginated list's own invalidate helper", () => {
+        const listInvalidateBlock = content.slice(
+            content.indexOf('const invalidateBusinessUnits = React.useCallback'),
+            content.indexOf('const getBusinessUnit ='),
+        );
+
+        it('clears the whole tagged group as well as the exact key, since one page-specific key would leave other pages stale', () => {
+            expect(listInvalidateBlock).toContain('return Promise.all([');
+            expect(listInvalidateBlock).toContain('invalidateBusinessUnitsCache(');
+            expect(listInvalidateBlock).toContain("invalidateCacheGroup('business-units'),");
+        });
+
+        it('lists invalidateCacheGroup in its useCallback deps', () => {
+            expect(listInvalidateBlock).toContain('}, [invalidateBusinessUnitsCache, invalidateCacheGroup]);');
+        });
+    });
+
+    it('leaves a tagged but NON-paginated GET clearing only its exact key -- no group clear needed when the key already covers everything stale for it', () => {
+        const detailInvalidateBlock = content.slice(
+            content.indexOf('const invalidateBusinessUnit = React.useCallback'),
+            content.indexOf('getGoals ='),
+        );
+
+        expect(detailInvalidateBlock).toContain('return invalidateBusinessUnitCache(');
+        expect(detailInvalidateBlock).not.toContain('invalidateCacheGroup');
+        expect(detailInvalidateBlock).not.toContain('Promise.all');
+    });
 });

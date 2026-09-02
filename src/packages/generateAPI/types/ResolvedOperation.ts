@@ -15,7 +15,7 @@ export type ResolvedRequestBody = {
     inlineType?: {name: string; text: string};
 };
 
-export type ResolvedCache = {ttl: number};
+export type ResolvedCache = {ttl: number; tags?: string[]};
 
 /** Documentation carried off the spec so generated methods and hooks can be JSDoc'd. */
 export type ResolvedDocs = {
@@ -49,7 +49,7 @@ export type ResolvedOperation = {
     response: {text: string; refs: Set<string>};
     /** Name of the generated type for `response`, e.g. `GetExpensesResponse` -- assigned centrally so type files and client files can't disagree about it. */
     responseTypeName: string;
-    /** From the operation's `x-cache-config` extension. Only ever set on GET operations without query params -- caching a paginated list isn't supported yet. */
+    /** From the operation's `x-cache-config` extension. Only ever set on GET operations. Query params are folded into the cache key, so paginated/filtered variants cache separately; `tags` (if declared) let a mutation invalidate every cached variant at once via `invalidateCacheGroup`. */
     cache?: ResolvedCache;
     docs: ResolvedDocs;
 };

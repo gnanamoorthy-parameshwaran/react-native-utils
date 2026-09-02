@@ -1,5 +1,12 @@
 # Changelog
 
+# [1.4.0](https://github.com/gnanamoorthy-parameshwaran/react-native-utils/compare/v1.3.0...v1.4.0) (2026-09-02)
+
+
+### Features
+
+* **generateAPI:** clear the tag group from a paginated GET's own invalidate helper ([56cec5a](https://github.com/gnanamoorthy-parameshwaran/react-native-utils/commit/56cec5a874a065e740325a3c4c7967f3c053b860))
+
 # [1.3.0](https://github.com/gnanamoorthy-parameshwaran/react-native-utils/compare/v1.2.1...v1.3.0) (2026-09-02)
 
 

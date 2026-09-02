@@ -113,13 +113,22 @@ implementation.
 ### 2.6 Caching
 
 - Per-endpoint cache behavior is read from an `x-cache-config` OpenAPI vendor extension on the
-  operation, e.g. `{ "ttl": 300 }` (seconds).
-- Only applies to `GET` operations with no query parameters — caching a paginated/query-filtered
-  endpoint is intentionally out of scope for now.
-- When present, the generated method's `request()` call gets a `cacheConfig: { ttl, key }`
-  (key computed via `createAPI`'s exported `getCacheKey({ method, endpoint })`), and a companion
-  `invalidate{Resource}` method is generated next to it, taking the same path params and
-  recomputing the identical cache key to call `invalidateCache`.
+  operation, e.g. `{ "ttl": 300000, "tags": ["business-units"] }` (`ttl` in milliseconds; `tags`
+  optional).
+- Applies to any `GET` operation, including ones with query parameters — the generated cache key
+  folds the query string in (`getCacheKey({ method, endpoint, query })`), so distinct params
+  combinations (e.g. each paginated page or filter) cache under distinct keys instead of colliding.
+- When present, the generated method's `request()` call gets a `cacheConfig: { ttl, key, tags? }`
+  (key computed via `createAPI`'s exported `getCacheKey`), and a companion `invalidate{Resource}`
+  method is generated next to it, taking the same path/query params and recomputing the identical
+  cache key to call `invalidateCache` — clearing only that one exact variant.
+- If one or more operations declare the same `tags` entry, one `invalidate{Tag}Group()` helper is
+  emitted per unique tag (deduplicated across the whole client file, not once per operation) that
+  clears every cached entry carrying that tag at once — the way to invalidate every page/filter
+  variant of a cached list after a mutation, since the per-operation `invalidate{Resource}` alone
+  only ever clears one exact key. Backed by `TaggedCacheDriver`
+  (`src/packages/createAPI/drivers/TaggedCacheDriver.ts`), which any `APICacheDriver` is wrapped in
+  automatically inside `createAPI()` — no driver-specific support needed.
 
 ### 2.7 Custom generators (user-defined output structure)
 
@@ -322,10 +331,12 @@ trailing id (e.g. `getExpense({ expense })`) would bind it on the method instead
 
 ### 3.7 Known scope limits
 
-- Pagination: query-parameterized `GET`s never get `cacheConfig`, even if `x-cache-config` is
-  present on the operation.
 - Cache TTL is a single static value per endpoint from the spec; it is not derived from the
   actual `Cache-Control` response header at request time.
+- Mutations never auto-invalidate a tag group — `invalidate{Tag}Group()` (§2.6) has to be called
+  explicitly after a successful POST/PUT/PATCH/DELETE; there is no `x-cache-invalidate`-style
+  extension wiring that up automatically (deliberate: kept explicit rather than adding implicit
+  cross-operation coupling).
 - Only the React driver is implemented. The framework seam exists (`FrameworkGenerator` contract,
   framework-neutral `ParsedAPI` IR, `config.framework` selection), but a Vue driver hasn't been
   written yet — there is also no Vue equivalent of the `createAPI`/`useAPI` runtime to generate

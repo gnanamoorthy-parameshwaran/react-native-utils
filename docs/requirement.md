@@ -317,7 +317,7 @@ trailing id (e.g. `getInvoice({ invoice })`) would bind it on the method instead
 ### 3.7 Known scope limits
 
 - Query caching is simple TTL expiry in memory (same-key requests are shared): no background
-  revalidation, no refetch on focus/reconnect, no pagination/infinite helpers and no persistence
+  revalidation, no refetch on reconnect (focus refetch needs `useFocusEffect` passed to `createAPI`), no pagination/infinite helpers and no persistence
   across app restarts.
 - Only the React driver is implemented. The framework seam exists (`FrameworkGenerator` contract,
   framework-neutral `ParsedAPI` IR, `config.framework` selection), but a Vue driver hasn't been

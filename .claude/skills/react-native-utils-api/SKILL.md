@@ -34,6 +34,7 @@ import {createAPI} from '@gnanamoorthy/react-native-utils';
 const {useAPI, useQuery, invalidateQueries} = createAPI({
     baseURL: 'https://api.example.com',
     queryTtl: 60_000,               // optional: default ttl (ms) for queries that don't set one; 0 if omitted
+    useFocusEffect,                 // optional: e.g. from @react-navigation/native; refetch expired queries on screen focus
     throwException: true,           // optional: throw typed APIxxxError on non-2xx instead of returning the body
     maxRetries: 1,                  // optional
     onBeforeRequest: async ({headers, emitEvent}) => ({headers}), // e.g. attach an auth token
@@ -78,6 +79,10 @@ Behaviour that matters when debugging (all in `src/packages/createAPI/client.ts`
 - Components on the same key share one in-flight request (`inflight` map). `invalidateQueries` drops
   matching in-flight requests, so a refetch after a mutation always sends a new request.
 - `refetch()` and invalidation always hit the network; a key change reads that key's own cache entry.
+- With `useFocusEffect` passed to `createAPI`, a query fetches on screen focus only if its cache expired
+  (disabled queries are skipped), and `invalidateQueries` refetches only focused queries; background
+  screens just lose their cache entry and fetch on their next focus. Without it, focus does nothing and
+  every mounted, enabled match refetches on invalidation.
 - Pagination helpers and infinite queries are not implemented yet.
 
 Roles: `useAPI` is the axios-like request layer, managed in one place. `useQuery` is a

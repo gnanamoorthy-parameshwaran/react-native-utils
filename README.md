@@ -42,6 +42,16 @@ invalidateQueries(['posts']);       // every cached post; mounted ones refetch
 ```
 
 Components on the same key share one in-flight request. The query cache is in memory only.
+
+To fetch again when a screen regains focus, pass your navigation library's focus hook once. Screens
+don't import it. A query fetches on focus only if its cache has expired, and `invalidateQueries`
+refetches only the focused screen; background screens fetch when you return to them:
+
+```ts
+import {useFocusEffect} from '@react-navigation/native';
+
+createAPI({baseURL: 'https://api.example.com', queryTtl: 60_000, useFocusEffect});
+```
 Pagination helpers and infinite queries are not implemented yet.
 
 ### Generating typed hooks from OpenAPI

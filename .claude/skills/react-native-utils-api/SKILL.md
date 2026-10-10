@@ -1,14 +1,15 @@
 ---
 name: react-native-utils-api
-description: Set up and use @gnanamoorthy/react-native-utils' createAPI runtime and generateAPI code generator in a React Native app -- wiring createAPI/useAPI, running `generate-client` against an OpenAPI spec to produce typed hooks, configuring x-cache-config caching plus tag-based group invalidation, and writing custom generator drivers. Use whenever the user asks to set up API calls in a React Native app using this package, generate a typed API client from an OpenAPI/Scramble spec, add or debug caching/cache invalidation on a useAPI() call, or extend/customize generateAPI's output.
+description: Set up and use @gnanamoorthy/react-native-utils' createAPI runtime and generateAPI code generator in a React Native app -- wiring createAPI/useAPI/useQuery, running `generate-client` against an OpenAPI spec to produce typed API client hooks, composing page-level caching with useQuery, and writing custom generator drivers. Use whenever the user asks to set up API calls in a React Native app using this package, generate a typed API client from an OpenAPI/Scramble spec, add or debug caching/cache invalidation with useQuery/invalidateQueries, or extend/customize generateAPI's output.
 ---
 
 # react-native-utils: createAPI + generateAPI
 
 Two packages that work together, not two unrelated tools:
 
-- **`createAPI`** (`src/packages/createAPI`) — the runtime. A factory that returns a `useAPI()`
-  hook: `{ loading, request, invalidateCache, invalidateCacheGroup }`. Ships in the RN/web bundle.
+- **`createAPI`** (`src/packages/createAPI`) — the runtime. A factory returning
+  `{ useAPI, useQuery, invalidateQueries }`. `useAPI()` is `{ loading, request }` with no caching;
+  `useQuery` caches results per query key with a TTL. Ships in the RN/web bundle.
 - **`generateAPI`** (`src/packages/generateAPI`) — a Node-only CLI/codegen tool that reads a
   project's OpenAPI spec and **emits React hooks that call `useAPI()` for you**, so nobody
   hand-writes `useProduct()`/`useContact()` against raw `request()` calls. Never bundled into the
@@ -22,15 +23,17 @@ Read away and will always be current.
 
 ## 1. Setting up the createAPI runtime
 
-One `createAPI({...})` call per app, producing one `useAPI` hook re-exported from a project file
-(convention: `src/hooks/useAPI.ts` — see `example/src/hooks/useAPI.ts` for a real instance):
+One `createAPI({...})` call per app, re-exported from a project file (convention:
+`src/hooks/useAPI.ts`; see `example/src/hooks/useAPI.ts`). The generator's `useAPIImportPath`
+points at this file and only needs `useAPI` as its **default** export. `useQuery` and
+`invalidateQueries` are named exports for pages to use:
 
 ```ts
-import {createAPI, MemoryCacheDriver} from '@gnanamoorthy/react-native-utils';
+import {createAPI} from '@gnanamoorthy/react-native-utils';
 
-const useAPI = createAPI({
+const {useAPI, useQuery, invalidateQueries} = createAPI({
     baseURL: 'https://api.example.com',
-    cache: new MemoryCacheDriver(), // optional, this is the default
+    queryTtl: 60_000,               // optional: default ttl (ms) for queries that don't set one; 0 if omitted
     throwException: true,           // optional: throw typed APIxxxError on non-2xx instead of returning the body
     maxRetries: 1,                  // optional
     onBeforeRequest: async ({headers, emitEvent}) => ({headers}), // e.g. attach an auth token
@@ -38,47 +41,48 @@ const useAPI = createAPI({
     onError: async ({error, url, options, response, emitEvent}) => {},
 });
 
+export {useQuery, invalidateQueries};
 export default useAPI;
 ```
 
-- Check `src/packages/createAPI/types.ts` for the exact `CreateAPIProps`/`FetchProps` shape before
-  writing a call — don't guess field names.
-- Only `MemoryCacheDriver` is exported from the package root today
-  (`src/packages/createAPI/index.ts`); `AsyncStorageCacheDriver` (persistent RN cache) exists at
-  `src/packages/createAPI/drivers/AsyncStorageCacheDriver.ts` but isn't re-exported, so reaching it
-  needs a deep import or the export list needs updating first — flag this to the user rather than
-  assuming it's importable.
-- Every driver passed as `cache` is wrapped internally in `TaggedCacheDriver`
-  (`src/packages/createAPI/drivers/TaggedCacheDriver.ts`) automatically — this is what makes
-  `invalidateCacheGroup` work regardless of which driver you pass. You never construct
-  `TaggedCacheDriver` yourself.
-- Wrap the app in `APIContextWrapper` (from the same package) so `useAPI()`'s `emitEvent` has
-  something to publish to.
+- Check `src/packages/createAPI/types.ts` for the exact option/result shapes (`UseQueryOptions`,
+  `UseQueryResult`, `FetchProps`) before writing a call. Don't guess field names.
+- The query cache is in memory only. There is no persistence driver yet, so cached data doesn't
+  survive an app restart.
+- Wrap the app in `APIContextWrapper` so `emitEvent` has something to publish to.
 
-### Calling the runtime directly (when there's no generated hook yet)
+### Querying without a generated hook
 
 ```ts
-const {loading, request, invalidateCache, invalidateCacheGroup} = useAPI();
+// Plain request (mutations, one-offs): no cache
+const {loading, request} = useAPI();
+await request<Thing>({method: 'POST', endpoint: '/v1/things', body: JSON.stringify(input)});
 
-// Uncached GET
-const data = await request<MyResponseType>({method: 'GET', endpoint: '/v1/things'});
-
-// Cached GET, tagged for group invalidation
-const data = await request<MyResponseType>({
-    method: 'GET',
-    endpoint: '/v1/things',
-    cacheConfig: {ttl: 300000, tags: ['things']}, // key omitted -> derived via getCacheKey({method, endpoint})
+// Cached query: `request` in queryFn is useAPI's request without the loading state
+const {data, error, isLoading, refetch} = useQuery({
+    queryKey: ['things', {page}],          // serializable array; object key order doesn't matter
+    queryFn: ({request}) => request<Thing[]>({endpoint: `/v1/things?page=${page}`}),
+    ttl: 300_000,                          // served from cache until expiry, then the next mount fetches
+    enabled: !!userId,                     // lazy: don't fetch until true
+    onSuccess: data => {},
+    onError: error => {},
 });
 
-// After a mutation elsewhere, clear every cached variant tagged "things"
-// (every page/filter combination, not just one exact key):
-await invalidateCacheGroup('things');
-
-// Or clear one exact cached entry by its key:
-await invalidateCache(getCacheKey({method: 'GET', endpoint: '/v1/things'}));
+// After a mutation: clears by key prefix; mounted matching queries refetch immediately
+await invalidateQueries(['things']);
 ```
 
-Prefer generating hooks with `generateAPI` over hand-writing this — see below.
+Behaviour that matters when debugging (all in `src/packages/createAPI/client.ts`):
+
+- The cache is a flat `Map<hashKey(queryKey), {queryKey, data, expiresAt}>`, in memory only.
+- Components on the same key share one in-flight request (`inflight` map). `invalidateQueries` drops
+  matching in-flight requests, so a refetch after a mutation always sends a new request.
+- `refetch()` and invalidation always hit the network; a key change reads that key's own cache entry.
+- Pagination helpers and infinite queries are not implemented yet.
+
+Roles: `useAPI` is the axios-like request layer, managed in one place. `useQuery` is a
+page-level composable where each screen picks its own keys and TTL. Prefer generating the
+API clients with `generateAPI` over hand-writing `request()` calls; see below.
 
 ## 2. Generating typed hooks with generateAPI
 
@@ -117,45 +121,33 @@ never overwrite real generated output while experimenting.
 ### 2.3 What comes out
 
 One `use{Resource}.ts` hook file per `(version, folder, resource)` group, one type file per
-resource group. A generated method:
-
-```ts
-const getExpenses = React.useCallback(() => {
-    return getExpensesRequest<GetExpensesResponse>({
-        method: 'GET',
-        endpoint: `/v1/business-units/${businessUnit}/expenses`,
-        cacheConfig: {ttl: 300000, key: getCacheKey({method: 'GET', endpoint: `...`})},
-    });
-}, [getExpensesRequest, businessUnit]);
-```
+resource group. Each `use{Resource}()` hook holds plain typed `request` methods with per-method
+loading flags. The generator emits **API clients only**: no query hooks, invalidate helpers or cache
+options. The full sample is in docs/requirement.md §3.6.
 
 Naming, object-param convention, parent-vs-own path param placement, and every other output rule:
 docs/requirement.md §2.5. Don't hand-edit generated files — they're regenerated wholesale and
 marked "do not edit by hand" in their own header comment; change the spec or the generator instead.
 
-### 2.4 Caching + group invalidation from the spec side
+### 2.4 Caching a generated client at page level
 
-Caching is driven entirely by an `x-cache-config` vendor extension on a GET operation in the
-OpenAPI spec (e.g. added via a Scramble PHP attribute/annotation on the backend, not hand-edited
-into the generated spec.json):
+Compose a generated method inside `useQuery` on the screen that needs it, with
+keys the screen chooses:
 
-```json
-"x-cache-config": {"ttl": 300000, "tags": ["business-units"]}
+```ts
+const {getInvoices} = useInvoice({businessUnit});
+
+const {data} = useQuery({
+    queryKey: ['invoices', {businessUnit, page}],
+    queryFn: () => getInvoices({params: {page}}),
+    ttl: 300_000,
+});
+
+// After a mutation: every cached invoices page, by key prefix
+await invalidateQueries(['invoices']);
 ```
 
-- `ttl` — milliseconds.
-- `tags` — optional. Put the **same** tag on a resource's list GET and its detail GET(s) so one
-  `invalidate{Tag}Group()` helper (deduplicated per file, emitted once even if several operations
-  share the tag) clears every cached variant of both at once after a mutation.
-- Query params (pagination, filters) are supported and cache correctly — each distinct params
-  combination gets its own key via `getCacheKey({method, endpoint, query})`
-  (`src/packages/createAPI/util.ts`), so `?page=1` and `?page=2` never collide.
-- Without `tags`, a cached GET still gets a per-operation `invalidate{Resource}()` helper that
-  clears only the one exact key matching the params it's called with — not useful for clearing
-  every page of a paginated list at once, which is exactly what `tags` is for.
-
-Resolver: `src/packages/generateAPI/resolvers/CacheResolver.ts`. Emission (cache key construction,
-tag-group helper generation): `src/packages/generateAPI/generators/frameworks/ReactClientGenerator.ts`.
+An `x-cache-config` vendor extension in the spec is ignored by the generator.
 
 ### 2.5 Custom output (skip the built-in React hooks)
 
@@ -168,7 +160,7 @@ framework) but still wants the spec parsed the same way.
 
 1. Read docs/requirement.md in full — it's the requirements record, not just a README, and
    documents *why* things are shaped the way they are (e.g. why there's no shared response
-   wrapper type, why cache keys fold in the query string).
+   wrapper type, why query keys include the query params).
 2. Rebuild the CLI after any change under `src/packages/generateAPI/`: `npm run build:cli`
    (`example`'s `generate:api` script runs the **compiled** `lib/cli`, not the TS source).
 3. Regenerate against the local spec fixture and read the diff before trusting a change —

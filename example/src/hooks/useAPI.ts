@@ -1,12 +1,17 @@
 import {createAPI} from '@gnanamoorthy/react-native-utils';
 
-export default createAPI({
-    baseURL: 'http://192.168.1.3:81/api',
+const {useAPI, useQuery, invalidateQueries} = createAPI({
+    baseURL: 'https://jsonplaceholder.typicode.com',
+    queryTtl: 60_000,
     onBeforeRequest: async props => {
         props.headers.set('Accept', 'application/json');
         return props;
     },
     onAfterResponse: async props => {
+        console.log('[api]', props.response.status, props.response.url);
         return props.response;
     },
 });
+
+export {useQuery, invalidateQueries};
+export default useAPI;

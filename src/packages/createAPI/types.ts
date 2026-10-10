@@ -1,6 +1,4 @@
 export type RequestBody = string | FormData | null;
-export type CacheConfig = {key?: string; ttl: number; tags?: string[]};
-export type CacheEntry = {value: unknown; expiresAt: number};
 export type RetryOptions = {headers?: Headers; body?: RequestBody};
 
 export type Retry = (options?: RetryOptions) => Promise<Response>;
@@ -14,21 +12,15 @@ export type OnBeforeResult<T = any> = (props: OnBeforeResultProps) => Promise<T>
 export type OnErrorProps = {error: unknown; url: string; options: FetchProps; response?: Response; emitEvent: EmitEvent};
 export type OnError = (props: OnErrorProps) => Promise<void> | void;
 
-export type CacheStorage = {
-    get(key: string): Promise<string | null>;
-    set(key: string, value: string, ttl: number): Promise<void>;
-    delete(key: string): Promise<void>;
-    clear(): Promise<void>;
-};
-
 export type CreateAPIProps = {
     baseURL: string;
     throwException?: boolean;
     onBeforeRequest?: OnBeforeRequest;
     onAfterResponse?: OnAfterResponse;
     onError?: OnError;
-    cache?: APICacheDriver;
     maxRetries?: number;
+    /** Default `ttl` (ms) for `useQuery` when a query doesn't set its own. Defaults to 0 (no caching). */
+    queryTtl?: number;
 };
 
 export type FetchProps<T = any> = {
@@ -40,15 +32,35 @@ export type FetchProps<T = any> = {
     onAfterResponse?: OnAfterResponse;
     onBeforeResult?: OnBeforeResult<T>;
     signal?: AbortSignal;
-    cacheConfig?: CacheConfig;
     maxRetries?: number;
 };
 
 export type ValidationErrors = Record<string, string[]>;
 
-export interface APICacheDriver {
-    get<T>(key: string): Promise<T | undefined>;
-    set(key: string, value: unknown, ttl: number): Promise<void>;
-    delete(key: string): Promise<void>;
-    deleteAll(): Promise<void>;
-}
+export type QueryKey = readonly unknown[];
+export type Request = <T = any>(options: FetchProps<T>) => Promise<T>;
+
+export type QueryFunctionContext = {
+    /** `useAPI().request` without the loading state. */
+    request: Request;
+};
+
+export type UseQueryOptions<T> = {
+    queryKey: QueryKey;
+    queryFn: (context: QueryFunctionContext) => Promise<T>;
+    /** How long (ms) a result is served from cache before the next mount refetches. Defaults to `createAPI`'s `queryTtl`. */
+    ttl?: number;
+    /** Set to false to defer fetching until it becomes true or `refetch()` is called. */
+    enabled?: boolean;
+    onSuccess?: (data: T) => void;
+    onError?: (error: unknown) => void;
+};
+
+export type UseQueryResult<T> = {
+    data: T | undefined;
+    error: unknown;
+    /** True while a request for this query is in flight. */
+    isLoading: boolean;
+    /** Fetches again, ignoring the cache. */
+    refetch: () => Promise<void>;
+};

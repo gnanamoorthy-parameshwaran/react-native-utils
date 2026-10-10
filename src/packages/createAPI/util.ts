@@ -41,7 +41,7 @@ import {
     APIValidationError,
     APIVariantAlsoNegotiatesError,
 } from './exceptions';
-import type {FetchProps} from './types';
+import type {QueryKey} from './types';
 
 export const parseResponseBody = async (response: Response): Promise<any> => {
     if (response.status === 204 || response.status === 205) return undefined;
@@ -151,20 +151,43 @@ export const validateAndThrowExceptions = ({response, result}: {response: Respon
     }
 };
 
-export function getCacheKey({
-    method = 'GET',
-    endpoint,
-    query,
-}: {
-    method: FetchProps['method'];
-    endpoint: string;
-    query?: Record<string, string>;
-}): string {
-    if (!query || Object.keys(query).length === 0) return `${method}:${endpoint}`;
+const isPlainObject = (value: unknown): value is Record<string, unknown> => Object.prototype.toString.call(value) === '[object Object]';
 
-    const sorted = Object.keys(query)
-        .sort()
-        .map(key => `${key}=${query[key]}`)
-        .join('&');
-    return `${method}:${endpoint}?${sorted}`;
+/**
+ * Serializes a query key to a stable string. Object keys are sorted, so
+ * `{page: 1, sort: 'asc'}` and `{sort: 'asc', page: 1}` hash to the same entry.
+ */
+export function hashKey(queryKey: QueryKey): string {
+    return JSON.stringify(queryKey, (_key, value) =>
+        isPlainObject(value)
+            ? Object.keys(value)
+                  .sort()
+                  .reduce<Record<string, unknown>>((sorted, key) => {
+                      sorted[key] = value[key];
+                      return sorted;
+                  }, {})
+            : value,
+    );
+}
+
+/**
+ * True when every property present in `b` deep-equals the same property in `a`.
+ * Extra properties on `a` are ignored, which is what lets a key filter match partially.
+ */
+export function partialDeepEqual(a: unknown, b: unknown): boolean {
+    if (a === b) return true;
+    if (typeof a !== typeof b || !a || !b || typeof a !== 'object') return false;
+
+    return Object.keys(b as object).every(key => partialDeepEqual((a as Record<string, unknown>)[key], (b as Record<string, unknown>)[key]));
+}
+
+/**
+ * True when `filter` is a prefix of `queryKey`: `['posts']` matches
+ * `['posts', {page: 2}]`. Object segments match partially, so
+ * `['posts', {userId: 1}]` also matches `['posts', {userId: 1, page: 2}]`.
+ */
+export function matchKey(queryKey: QueryKey, filter: QueryKey): boolean {
+    if (filter.length > queryKey.length) return false;
+
+    return filter.every((segment, index) => partialDeepEqual(queryKey[index], segment));
 }

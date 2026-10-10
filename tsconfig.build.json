@@ -1,4 +1,4 @@
 {
     "extends": "./tsconfig",
-    "exclude": ["example", "lib", "src/packages/generateAPI"]
+    "exclude": ["example", "lib", "skills", "src/packages/generateAPI"]
 }

@@ -1,4 +1,3 @@
-import CacheResolver from '../resolvers/CacheResolver.ts';
 import DocResolver from '../resolvers/DocResolver.ts';
 import NamingResolver from '../resolvers/NamingResolver.ts';
 import ParameterResolver from '../resolvers/ParameterResolver.ts';
@@ -22,7 +21,6 @@ export default class OperationParser {
     protected parameters: ParameterResolver;
     protected requestBodies: RequestBodyResolver;
     protected responses: ResponseResolver;
-    protected cache = new CacheResolver();
     protected docs: DocResolver;
 
     constructor(spec: OpenAPI) {
@@ -133,7 +131,6 @@ export default class OperationParser {
             requestBody: this.requestBodies.resolve(operation, methodPascal),
             response: this.responses.resolve(operation),
             responseTypeName: `${methodPascal}Response`,
-            cache: this.cache.resolve(method, operation),
             docs: this.docs.resolve(operation),
         };
     }

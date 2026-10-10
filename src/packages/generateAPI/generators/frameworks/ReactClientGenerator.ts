@@ -5,7 +5,6 @@ import ParameterResolver from '../../resolvers/ParameterResolver.ts';
 import TypeResolver from '../../resolvers/TypeResolver.ts';
 import DocUtil from '../../support/DocUtil.ts';
 import OperationGrouper from '../../support/OperationGrouper.ts';
-import StringUtil from '../../support/StringUtil.ts';
 import type {FrameworkGenerator, GeneratedFile} from '../../contracts/FrameworkGenerator.ts';
 import type {ClientGeneratorConfig} from '../../types/Config.ts';
 import type {HttpMethodKey, ParsedAPI, ResolvedOperation} from '../../types/ResolvedOperation.ts';
@@ -14,9 +13,9 @@ type ObjectParamField = {name: string; type: string; required: boolean};
 
 /**
  * React driver: assembles each operation group into a `use{Resource}` hook file
- * built on `useAPI` -- one `React.useCallback` per operation, per-operation
- * loading flags, and cache invalidation helpers for cached GETs -- alongside
- * the shared framework-neutral type files.
+ * built on `useAPI` -- one `React.useCallback` per operation and per-operation
+ * loading flags -- alongside the shared framework-neutral type files. It only
+ * emits API clients; caching is composed at page level with `useQuery`.
  */
 export default class ReactClientGenerator implements FrameworkGenerator {
     protected naming = new NamingResolver();
@@ -44,7 +43,6 @@ export default class ReactClientGenerator implements FrameworkGenerator {
         const hookLines: string[] = [];
         const callbackCodes: string[] = [];
         const returnItems: string[] = [];
-        let usesCache = false;
 
         group.forEach(operation => {
             const built = this.buildMethod(operation);
@@ -55,28 +53,8 @@ export default class ReactClientGenerator implements FrameworkGenerator {
             });
             hookLines.push(built.hookLine);
             callbackCodes.push(built.callbackCode);
-            returnItems.push(built.loadingName, ...built.methodNames);
-            usesCache = usesCache || built.usesCache;
+            returnItems.push(built.loadingName, built.methodName);
         });
-
-        // Cache tags cut across operations (a mutation invalidates a list's cache
-        // regardless of which operation populated it), so the group-invalidate
-        // helper is emitted once per unique tag for the whole file, not per
-        // operation -- one extra `useAPI()` call sources the shared
-        // `invalidateCacheGroup`, since every instance closes over the same
-        // underlying cache created once by `createAPI()`.
-        const cacheTags = new Set<string>();
-        group.forEach(operation => operation.cache?.tags?.forEach(tag => cacheTags.add(tag)));
-        if (cacheTags.size > 0) {
-            hookLines.push('    const { invalidateCacheGroup } = useAPI();');
-            cacheTags.forEach(tag => {
-                const groupName = `invalidate${StringUtil.pascalCase(tag)}Group`;
-                callbackCodes.push(
-                    `${DocUtil.block([`Invalidates every cached response tagged \`${tag}\`, across every pagination page and filter combination.`], '    ')}\n    const ${groupName} = React.useCallback(() => {\n        return invalidateCacheGroup('${tag}');\n    }, [invalidateCacheGroup]);`,
-                );
-                returnItems.push(groupName);
-            });
-        }
 
         const clientDirectory = `${this.config.clientOutputDir}/${first.version}/${first.folder}`;
         // clientOutputDir and typeOutputDir are independent config paths (no longer
@@ -89,12 +67,7 @@ export default class ReactClientGenerator implements FrameworkGenerator {
             typeImportLines.push(`import type { ${[...names].join(', ')} } from '${typeImportBase}/${groupName}';`);
         });
 
-        const header = [
-            `import React from 'react';`,
-            `import useAPI from '${this.config.useAPIImportPath}';`,
-            ...(usesCache ? [`import { getCacheKey } from '@gnanamoorthy/react-native-utils';`] : []),
-            ...typeImportLines,
-        ].join('\n');
+        const header = [`import React from 'react';`, `import useAPI from '${this.config.useAPIImportPath}';`, ...typeImportLines].join('\n');
 
         // A hook-level (parent) param is required only if every operation in this
         // file needs it -- files can mix scopes (e.g. a nested list alongside
@@ -216,25 +189,14 @@ export default class ReactClientGenerator implements FrameworkGenerator {
         const endpoint = operation.pathTemplate.replace(/\{([^}]+)\}/g, (_match, name: string) => '${' + name + '}');
         const requestName = `${operation.methodName}Request`;
         const httpMethodKey = operation.httpMethod.toLowerCase() as HttpMethodKey;
-        // Strips the leading verb the same way loading names do, so the public
-        // invalidate method reads as invalidateProducts/invalidateProduct rather
-        // than invalidateGetProducts.
-        const invalidateSuffix = this.naming.loadingSuffix(operation.methodName);
         const loadingName = this.naming.loadingName(httpMethodKey, operation.methodName);
-        const invalidateName = `invalidate${invalidateSuffix}Cache`;
-        // Query params are folded into the same endpoint template the request
-        // itself uses, so e.g. `?page=1` and `?page=2` resolve to distinct cache
-        // keys instead of colliding on one paginated-list entry.
-        const cacheKeyExpr = `getCacheKey({ method: 'GET', endpoint: \`${endpoint}${hasQuery ? '${query}' : ''}\` })`;
 
-        const hookLine = operation.cache
-            ? `    const { loading: ${loadingName}, request: ${requestName}, invalidateCache: ${invalidateName} } = useAPI();`
-            : `    const { loading: ${loadingName}, request: ${requestName} } = useAPI();`;
+        const hookLine = `    const { loading: ${loadingName}, request: ${requestName} } = useAPI();`;
 
         // Hook-level params (e.g. businessUnit) aren't part of this method's own
         // object -- they're free variables closing over the hook's destructured
-        // props, so they have to be in the useCallback deps alongside the request/
-        // invalidate function itself or a stale value could get captured.
+        // props, so they have to be in the useCallback deps alongside the request
+        // function itself or a stale value could get captured.
         const objectParam = this.buildObjectParam(fields);
 
         // Every method and every parameter gets a JSDoc entry -- when the spec has
@@ -273,56 +235,8 @@ export default class ReactClientGenerator implements FrameworkGenerator {
         lines.push(`        return ${requestName}<${responseTypeName}>({`);
         lines.push(`            method: '${operation.httpMethod}',`, `            endpoint: \`${endpoint}${hasQuery ? '${query}' : ''}\`,`);
         if (requestBodyLine) lines.push(requestBodyLine);
-        if (operation.cache) {
-            const tagsExpr = operation.cache.tags ? `, tags: ${JSON.stringify(operation.cache.tags)}` : '';
-            lines.push(`            cacheConfig: { ttl: ${operation.cache.ttl}, key: ${cacheKeyExpr}${tagsExpr} },`);
-        }
         lines.push(`        });`);
         lines.push(`    }, [${[requestName, ...hookParamNames].join(', ')}]);`);
-
-        if (operation.cache) {
-            const tags = operation.cache.tags ?? [];
-            // A query-parameterized GET caches one entry per params combination, so
-            // clearing only the key for the params passed here would leave every
-            // other cached page/filter stale. When such an operation declares tags,
-            // its own invalidate helper also clears the whole tagged group, so a
-            // single call after a mutation drops every cached variant rather than
-            // just the one in hand. A GET with no query params needs no group clear:
-            // its exact key already covers everything that could be stale for it.
-            const invalidatesGroup = hasQuery && tags.length > 0;
-
-            lines.push('');
-            lines.push(
-                DocUtil.block(
-                    [
-                        `Invalidates the cached ${endpointDoc} response so the next \`${operation.methodName}\` call refetches.`,
-                        ...(invalidatesGroup
-                            ? [
-                                  '',
-                                  `Also clears every cached response tagged ${tags.map(tag => `\`${tag}\``).join(', ')} -- every page and filter combination, not just the params passed here.`,
-                              ]
-                            : []),
-                        '',
-                        ...paramTags,
-                    ],
-                    '    ',
-                ),
-            );
-            lines.push(`    const invalidate${invalidateSuffix} = React.useCallback((${objectParam}) => {`);
-            if (hasQuery) {
-                lines.push(`        const query = params ? \`?\${new URLSearchParams(params as Record<string, string>).toString()}\` : '';`);
-            }
-            if (invalidatesGroup) {
-                lines.push(`        return Promise.all([`);
-                lines.push(`            ${invalidateName}(${cacheKeyExpr}),`);
-                tags.forEach(tag => lines.push(`            invalidateCacheGroup('${tag}'),`));
-                lines.push(`        ]);`);
-            } else {
-                lines.push(`        return ${invalidateName}(${cacheKeyExpr});`);
-            }
-            const invalidateDeps = [invalidateName, ...(invalidatesGroup ? ['invalidateCacheGroup'] : []), ...hookParamNames];
-            lines.push(`    }, [${invalidateDeps.join(', ')}]);`);
-        }
 
         const typeRefs: {name: string; group: string}[] = [{name: responseTypeName, group: operation.resource}];
         if (operation.requestBody && operation.requestBody.type !== 'FormData') {
@@ -331,15 +245,12 @@ export default class ReactClientGenerator implements FrameworkGenerator {
             if (bodyGroup) typeRefs.push({name: bodyType, group: bodyGroup});
         }
 
-        const methodNames = operation.cache ? [operation.methodName, `invalidate${invalidateSuffix}`] : [operation.methodName];
-
         return {
             hookLine,
             callbackCode: lines.join('\n'),
             typeRefs,
             loadingName,
-            methodNames,
-            usesCache: !!operation.cache,
+            methodName: operation.methodName,
         };
     }
 }

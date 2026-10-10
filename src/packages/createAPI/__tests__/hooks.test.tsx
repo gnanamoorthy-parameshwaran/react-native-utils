@@ -1,6 +1,9 @@
+import React from 'react';
 import {act, renderHook, waitFor} from '@testing-library/react-native';
 
 import createAPI from '../client';
+
+import type {UseFocusEffect} from '../types';
 
 const flush = () => act(() => new Promise<void>(resolve => setTimeout(resolve, 0)));
 
@@ -107,5 +110,108 @@ describe('useQuery', () => {
 
         await waitFor(() => expect(result.current.data).toEqual({id: 7}));
         expect(fetchMock).toHaveBeenCalledWith('https://example.test/posts/7', expect.objectContaining({method: 'GET'}));
+    });
+});
+
+describe('useQuery with useFocusEffect', () => {
+    it("accepts React Navigation's useFocusEffect without the library importing it", () => {
+        type Fits = typeof import('@react-navigation/native').useFocusEffect extends UseFocusEffect ? true : false;
+        const fits: Fits = true;
+        expect(fits).toBe(true);
+    });
+
+    type Effect = Parameters<UseFocusEffect>[0];
+
+    /**
+     * Mimics a React Navigation screen: focus effects run while it is focused,
+     * and their cleanups run on blur.
+     */
+    function createScreen(focused: boolean) {
+        const effects = new Map<Effect, (() => void) | undefined>();
+        const run = (effect: Effect) => effects.set(effect, effect() ?? undefined);
+        const cleanup = (effect: Effect) => effects.get(effect)?.();
+
+        return {
+            register(effect: Effect) {
+                effects.set(effect, undefined);
+                if (focused) run(effect);
+                return () => {
+                    if (focused) cleanup(effect);
+                    effects.delete(effect);
+                };
+            },
+            focus: () =>
+                act(async () => {
+                    focused = true;
+                    effects.forEach((_, effect) => run(effect));
+                }),
+            blur: () =>
+                act(async () => {
+                    focused = false;
+                    effects.forEach((_, effect) => cleanup(effect));
+                }),
+        };
+    }
+
+    type Screen = ReturnType<typeof createScreen>;
+    const ScreenContext = React.createContext<Screen>(createScreen(true));
+    const useFakeFocusEffect: UseFocusEffect = effect => {
+        const screen = React.useContext(ScreenContext);
+        React.useEffect(() => screen.register(effect), [screen, effect]);
+    };
+    const onScreen = (screen: Screen) => ({
+        wrapper: ({children}: {children: React.ReactNode}) => <ScreenContext.Provider value={screen}>{children}</ScreenContext.Provider>,
+    });
+
+    it('fetches on focus only once the cache has expired', async () => {
+        const {useQuery} = createAPI({baseURL: 'https://example.test', useFocusEffect: useFakeFocusEffect});
+        const queryFn = jest.fn(async () => 'data');
+        const screen = createScreen(true);
+
+        renderHook(() => useQuery({queryKey: ['focus'], queryFn, ttl: 30}), onScreen(screen));
+        await waitFor(() => expect(queryFn).toHaveBeenCalledTimes(1));
+
+        await screen.blur();
+        await screen.focus();
+        expect(queryFn).toHaveBeenCalledTimes(1);
+
+        await act(() => new Promise<void>(resolve => setTimeout(resolve, 40)));
+        await screen.blur();
+        await screen.focus();
+        await waitFor(() => expect(queryFn).toHaveBeenCalledTimes(2));
+    });
+
+    it('does not fetch a disabled query on focus', async () => {
+        const {useQuery} = createAPI({baseURL: 'https://example.test', useFocusEffect: useFakeFocusEffect});
+        const queryFn = jest.fn(async () => 'data');
+        const screen = createScreen(true);
+
+        renderHook(() => useQuery({queryKey: ['off'], queryFn, enabled: false}), onScreen(screen));
+        await screen.blur();
+        await screen.focus();
+        expect(queryFn).not.toHaveBeenCalled();
+    });
+
+    it('refetches the focused screen on invalidation, and a background screen only when it regains focus', async () => {
+        const {useQuery, invalidateQueries} = createAPI({baseURL: 'https://example.test', queryTtl: 60_000, useFocusEffect: useFakeFocusEffect});
+        const listFn = jest.fn(async () => 'list');
+        const detailFn = jest.fn(async () => 'detail');
+        const listScreen = createScreen(true);
+        const detailScreen = createScreen(true);
+
+        const list = renderHook(() => useQuery({queryKey: ['posts'], queryFn: listFn}), onScreen(listScreen));
+        await waitFor(() => expect(list.result.current.data).toBe('list'));
+
+        await listScreen.blur();
+        renderHook(() => useQuery({queryKey: ['posts', {id: 1}], queryFn: detailFn}), onScreen(detailScreen));
+        await waitFor(() => expect(detailFn).toHaveBeenCalledTimes(1));
+
+        await act(() => invalidateQueries(['posts']));
+        expect(detailFn).toHaveBeenCalledTimes(2);
+        expect(listFn).toHaveBeenCalledTimes(1);
+
+        await detailScreen.blur();
+        await listScreen.focus();
+        await waitFor(() => expect(listFn).toHaveBeenCalledTimes(2));
     });
 });

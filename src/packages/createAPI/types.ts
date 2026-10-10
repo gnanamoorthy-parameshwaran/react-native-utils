@@ -21,7 +21,14 @@ export type CreateAPIProps = {
     maxRetries?: number;
     /** Default `ttl` (ms) for `useQuery` when a query doesn't set its own. Defaults to 0 (no caching). */
     queryTtl?: number;
+    /**
+     * Your navigation library's focus hook, e.g. React Navigation's `useFocusEffect`.
+     * When given, a query fetches again on screen focus if its cache has expired.
+     */
+    useFocusEffect?: UseFocusEffect;
 };
+
+export type UseFocusEffect = (effect: () => undefined | void | (() => void)) => void;
 
 export type FetchProps<T = any> = {
     method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';

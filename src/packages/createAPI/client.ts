@@ -6,8 +6,11 @@ import {hashKey, matchKey, parseResponseBody, validateAndThrowExceptions} from '
 import type {CreateAPIProps, EmitEvent, FetchProps, QueryKey, RequestBody, Retry, UseQueryOptions, UseQueryResult} from './types';
 
 type CacheEntry = {queryKey: QueryKey; data: unknown; expiresAt: number};
-type MountedQuery = {queryKey: QueryKey; isEnabled: () => boolean; refetch: () => Promise<void>};
+type MountedQuery = {queryKey: QueryKey; isEnabled: () => boolean; isFocused: () => boolean; refetch: () => Promise<void>};
 type QueryState<T> = {hash: string; data: T | undefined; error: unknown; isLoading: boolean};
+
+/** Stand-in when no focus hook is passed to `createAPI`, so `useQuery` calls the same hooks every render. */
+function noFocusEffect(): void {}
 
 /**
  * Creates one API instance. `useAPI` is the request layer (base URL, hooks,
@@ -22,6 +25,7 @@ export default function createAPI({
     onError,
     maxRetries = 1,
     queryTtl = 0,
+    useFocusEffect = noFocusEffect,
 }: CreateAPIProps) {
     /**
      * The request pipeline shared by `useAPI` and `useQuery`: global and
@@ -90,7 +94,7 @@ export default function createAPI({
      */
     const cache = new Map<string, CacheEntry>();
 
-    /** Every `useQuery` currently on screen, so invalidation can refetch what is visible. */
+    /** Every mounted `useQuery`, so invalidation can refetch the ones that are visible. */
     const mounted = new Set<MountedQuery>();
 
     /**
@@ -141,6 +145,9 @@ export default function createAPI({
         const currentHash = React.useRef(hash);
         currentHash.current = hash;
         const isActive = React.useRef(true);
+
+        /** Without a focus hook every mounted query counts as focused; with one, it tracks focus and blur. */
+        const isFocused = React.useRef(useFocusEffect === noFocusEffect);
         const lastFetch = React.useRef(0);
 
         /**
@@ -205,10 +212,25 @@ export default function createAPI({
             if (enabled) fetchData(false);
         }, [fetchData, enabled]);
 
+        /**
+         * On screen focus, fetch again only if the cache has expired (or was
+         * invalidated while the screen was in the background). The mount effect
+         * above may run alongside the first focus; both share one request.
+         */
+        const onFocus = React.useCallback(() => {
+            isFocused.current = true;
+            if (latest.current.enabled) fetchData(false);
+            return () => {
+                isFocused.current = false;
+            };
+        }, [fetchData]);
+        useFocusEffect(onFocus);
+
         React.useEffect(() => {
             const entry: MountedQuery = {
                 queryKey: latest.current.queryKey,
                 isEnabled: () => latest.current.enabled,
+                isFocused: () => isFocused.current,
                 refetch: () => fetchData(true),
             };
             mounted.add(entry);
@@ -225,8 +247,10 @@ export default function createAPI({
     /**
      * Clears every cached entry whose key starts with `queryKey` (`['posts']`
      * matches `['posts', {id: 1}]`; no key clears everything), then refetches
-     * the matching queries that are on screen. Matching in-flight requests are
-     * dropped too, so the refetch never reuses a request that started before it.
+     * the matching queries that are visible: mounted, enabled and focused.
+     * Background screens fetch when they regain focus, unmounted ones on their
+     * next mount. Matching in-flight requests are dropped too, so a refetch
+     * never reuses a request that started before the invalidation.
      */
     async function invalidateQueries(queryKey: QueryKey = []): Promise<void> {
         cache.forEach((entry, hash) => {
@@ -236,7 +260,7 @@ export default function createAPI({
             if (matchKey(running.queryKey, queryKey)) inflight.delete(hash);
         });
 
-        const visible = [...mounted].filter(query => query.isEnabled() && matchKey(query.queryKey, queryKey));
+        const visible = [...mounted].filter(query => query.isEnabled() && query.isFocused() && matchKey(query.queryKey, queryKey));
         await Promise.all(visible.map(query => query.refetch()));
     }
 

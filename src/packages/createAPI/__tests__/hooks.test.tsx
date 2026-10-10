@@ -51,6 +51,60 @@ describe('useQuery', () => {
         await waitFor(() => expect(result.current.data).toBe(1));
     });
 
+    it('keeps the previous page on screen while the next page loads with keepPreviousData', async () => {
+        const {useQuery} = createAPI({baseURL: 'https://example.test', queryTtl: 60_000});
+        const queryFn = jest.fn(async ({page}: {page: number}) => `page ${page}`);
+
+        const {result, rerender} = renderHook(
+            ({page}: {page: number}) => useQuery({queryKey: ['list', {page}], queryFn: () => queryFn({page}), keepPreviousData: true}),
+            {initialProps: {page: 1}},
+        );
+        await waitFor(() => expect(result.current.data).toBe('page 1'));
+
+        rerender({page: 2});
+        expect(result.current).toMatchObject({data: 'page 1', isPlaceholderData: true, isLoading: false, isFetching: true});
+        await waitFor(() => expect(result.current).toMatchObject({data: 'page 2', isPlaceholderData: false, isFetching: false}));
+
+        rerender({page: 1});
+        expect(result.current).toMatchObject({data: 'page 1', isPlaceholderData: false, isFetching: false});
+    });
+
+    it('goes blank on a new key without keepPreviousData', async () => {
+        const {useQuery} = createAPI({baseURL: 'https://example.test', queryTtl: 60_000});
+
+        const {result, rerender} = renderHook(
+            ({page}: {page: number}) => useQuery({queryKey: ['list', {page}], queryFn: async () => `page ${page}`}),
+            {
+                initialProps: {page: 1},
+            },
+        );
+        await waitFor(() => expect(result.current.data).toBe('page 1'));
+
+        rerender({page: 2});
+        expect(result.current).toMatchObject({data: undefined, isLoading: true, isPlaceholderData: false});
+        await waitFor(() => expect(result.current.data).toBe('page 2'));
+    });
+
+    it('reports a refetch over existing data as isFetching, not isLoading', async () => {
+        const {useQuery} = createAPI({baseURL: 'https://example.test', queryTtl: 60_000});
+        let resolve: (value: string) => void = () => {};
+        const queryFn = jest
+            .fn()
+            .mockResolvedValueOnce('first')
+            .mockImplementationOnce(() => new Promise<string>(r => (resolve = r)));
+
+        const {result} = renderHook(() => useQuery<string>({queryKey: ['refetch'], queryFn}));
+        await waitFor(() => expect(result.current.data).toBe('first'));
+
+        act(() => {
+            result.current.refetch();
+        });
+        expect(result.current).toMatchObject({data: 'first', isLoading: false, isFetching: true});
+
+        await act(async () => resolve('second'));
+        expect(result.current).toMatchObject({data: 'second', isFetching: false});
+    });
+
     it('invalidates by key prefix: refetches mounted queries and clears unmounted ones', async () => {
         const {useQuery, invalidateQueries} = createAPI({baseURL: 'https://example.test', queryTtl: 60_000});
         const postFn = jest.fn(async () => 'post');

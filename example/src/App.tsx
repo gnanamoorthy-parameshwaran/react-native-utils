@@ -25,7 +25,7 @@ export default function App() {
  */
 function PagedPosts() {
     const [page, setPage] = React.useState(1);
-    const {data, error, isLoading} = usePostsQuery(page);
+    const {data, error, isLoading, isFetching, isPlaceholderData} = usePostsQuery(page);
 
     return (
         <View style={styles.fill}>
@@ -33,12 +33,18 @@ function PagedPosts() {
             <View style={styles.row}>
                 <Button title="Previous" disabled={page === 1} onPress={() => setPage(p => p - 1)} />
                 <Text>Page {page}</Text>
-                <Button title="Next" disabled={isLoading || page === 10} onPress={() => setPage(p => p + 1)} />
-                {isLoading && <ActivityIndicator />}
+                <Button title="Next" disabled={isPlaceholderData || page === 10} onPress={() => setPage(p => p + 1)} />
+                {isFetching && <ActivityIndicator />}
             </View>
 
+            {isLoading && <ActivityIndicator />}
             {error ? <Text>{String(error)}</Text> : null}
-            <FlatList style={styles.fill} data={data} keyExtractor={item => String(item.id)} renderItem={({item}) => <PostRow post={item} />} />
+            <FlatList
+                style={[styles.fill, isPlaceholderData && styles.dimmed]}
+                data={data}
+                keyExtractor={item => String(item.id)}
+                renderItem={({item}) => <PostRow post={item} />}
+            />
         </View>
     );
 }

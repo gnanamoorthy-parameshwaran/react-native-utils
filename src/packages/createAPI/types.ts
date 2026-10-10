@@ -59,6 +59,8 @@ export type UseQueryOptions<T> = {
     ttl?: number;
     /** Set to false to defer fetching until it becomes true or `refetch()` is called. */
     enabled?: boolean;
+    /** While a new key loads, keep showing the previous key's data (e.g. page 1 while page 2 loads). */
+    keepPreviousData?: boolean;
     onSuccess?: (data: T) => void;
     onError?: (error: unknown) => void;
 };
@@ -66,8 +68,12 @@ export type UseQueryOptions<T> = {
 export type UseQueryResult<T> = {
     data: T | undefined;
     error: unknown;
-    /** True while a request for this query is in flight. */
+    /** True while fetching with nothing to show yet: the first load, or a new key without `keepPreviousData`. */
     isLoading: boolean;
+    /** True whenever a request for this query is in flight, including refetches over existing data. */
+    isFetching: boolean;
+    /** True while `data` is the previous key's data, shown by `keepPreviousData` until the new key loads. */
+    isPlaceholderData: boolean;
     /** Fetches again, ignoring the cache. */
     refetch: () => Promise<void>;
 };

@@ -7,7 +7,7 @@ import type {CreateAPIProps, EmitEvent, FetchProps, QueryKey, RequestBody, Retry
 
 type CacheEntry = {queryKey: QueryKey; data: unknown; expiresAt: number};
 type MountedQuery = {queryKey: QueryKey; isEnabled: () => boolean; isFocused: () => boolean; refetch: () => Promise<void>};
-type QueryState<T> = {hash: string; data: T | undefined; error: unknown; isLoading: boolean};
+type QueryState<T> = {hash: string; data: T | undefined; error: unknown; isFetching: boolean; isPlaceholderData: boolean};
 
 /** Stand-in when no focus hook is passed to `createAPI`, so `useQuery` calls the same hooks every render. */
 function noFocusEffect(): void {}
@@ -122,21 +122,30 @@ export default function createAPI({
         queryFn,
         ttl = queryTtl,
         enabled = true,
+        keepPreviousData = false,
         onSuccess,
         onError: onQueryError,
     }: UseQueryOptions<T>): UseQueryResult<T> {
         const {emitEvent} = React.useContext(APIContext);
         const hash = hashKey(queryKey);
 
-        const initialState = (): QueryState<T> => {
+        /**
+         * The state for the current key: its own cache entry if fresh. Otherwise,
+         * with `keepPreviousData`, the previous key's data stays on screen as
+         * placeholder (e.g. page 1 while page 2 loads) instead of going blank.
+         */
+        const stateForKey = (previous?: QueryState<T>): QueryState<T> => {
             const data = readCache<T>(hash);
-            return {hash, data, error: null, isLoading: enabled && data === undefined};
+            const isFetching = enabled && data === undefined;
+
+            if (data === undefined && keepPreviousData && previous?.data !== undefined) {
+                return {hash, data: previous.data, error: null, isFetching, isPlaceholderData: true};
+            }
+            return {hash, data, error: null, isFetching, isPlaceholderData: false};
         };
 
-        const [state, setState] = React.useState<QueryState<T>>(initialState);
-
-        /** A new key starts from its own cache entry instead of showing the previous key's data. */
-        if (state.hash !== hash) setState(initialState());
+        const [state, setState] = React.useState<QueryState<T>>(() => stateForKey());
+        if (state.hash !== hash) setState(stateForKey(state));
 
         /** The latest props, read when a fetch starts, so inline `queryFn`/callbacks are always current. */
         const latest = React.useRef({queryKey, queryFn, ttl, enabled, onSuccess, onQueryError, emitEvent});
@@ -163,13 +172,13 @@ export default function createAPI({
                 if (!force) {
                     const cached = readCache<T>(hash);
                     if (cached !== undefined) {
-                        setState({hash, data: cached, error: null, isLoading: false});
+                        setState({hash, data: cached, error: null, isFetching: false, isPlaceholderData: false});
                         return;
                     }
                 }
 
                 const {queryKey: key, queryFn: fn, ttl: entryTtl, onSuccess: success, onQueryError: failure, emitEvent: emit} = latest.current;
-                setState(previous => ({...previous, isLoading: true}));
+                setState(previous => ({...previous, isFetching: true}));
 
                 let running = inflight.get(hash);
                 if (!running) {
@@ -189,12 +198,12 @@ export default function createAPI({
                     const data = (await running.promise) as T;
                     if (isStale()) return;
 
-                    setState({hash, data, error: null, isLoading: false});
+                    setState({hash, data, error: null, isFetching: false, isPlaceholderData: false});
                     success?.(data);
                 } catch (error) {
                     if (isStale()) return;
 
-                    setState(previous => ({...previous, error, isLoading: false}));
+                    setState(previous => ({...previous, error, isFetching: false}));
                     failure?.(error);
                 }
             },
@@ -241,7 +250,14 @@ export default function createAPI({
 
         const refetch = React.useCallback(() => fetchData(true), [fetchData]);
 
-        return {data: state.data, error: state.error, isLoading: state.isLoading, refetch};
+        return {
+            data: state.data,
+            error: state.error,
+            isLoading: state.isFetching && state.data === undefined,
+            isFetching: state.isFetching,
+            isPlaceholderData: state.isPlaceholderData,
+            refetch,
+        };
     }
 
     /**

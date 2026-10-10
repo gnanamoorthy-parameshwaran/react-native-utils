@@ -2,6 +2,9 @@
 
 Used to store the common utilities for react native app
 
+New to the API layer? Read [Why createAPI, useAPI, useQuery and generateAPI](docs/api-layer.md)
+for the problems each piece solves compared with calling `fetch` directly.
+
 ## Installation
 
 ```sh
@@ -33,6 +36,14 @@ const {data, error, isLoading, refetch} = useQuery({
     enabled: !!id, // optional: don't fetch until true
 });
 
+// Page-number pagination: each page caches separately; the previous page stays visible while the
+// next loads. isLoading = nothing to show yet, isFetching = any request in flight.
+const {data: posts, isFetching, isPlaceholderData} = useQuery({
+    queryKey: ['posts', {page}],
+    queryFn: ({request}) => request<Post[]>({endpoint: `/posts?page=${page}`}),
+    keepPreviousData: true,
+});
+
 // Plain, uncached requests (mutations)
 const {loading, request} = useAPI();
 await request({method: 'PUT', endpoint: `/posts/${id}`, body: JSON.stringify(post)});
@@ -52,7 +63,7 @@ import {useFocusEffect} from '@react-navigation/native';
 
 createAPI({baseURL: 'https://api.example.com', queryTtl: 60_000, useFocusEffect});
 ```
-Pagination helpers and infinite queries are not implemented yet.
+Infinite queries (append-as-you-scroll lists) are not implemented yet.
 
 ### Generating typed hooks from OpenAPI
 
@@ -61,6 +72,19 @@ npx @gnanamoorthy/react-native-utils generate-client --config ./client-generator
 ```
 
 See [docs/requirement.md](docs/requirement.md) for the config and the generated output.
+
+### AI assistant skill
+
+The package ships an [Agent Skill](https://agentskills.io) that teaches AI coding assistants how to
+use `createAPI`, `useAPI`, `useQuery` and the generator. Install it into your project:
+
+```sh
+npx @gnanamoorthy/react-native-utils add-skill                 # -> .claude/skills/react-native-utils
+npx @gnanamoorthy/react-native-utils add-skill --dir <path>    # another agent's skills directory
+```
+
+Commit the installed folder so everyone on the project gets it, and re-run the command after
+upgrading the package to keep the instructions in step with the installed version.
 
 ### Migrating from 1.x
 

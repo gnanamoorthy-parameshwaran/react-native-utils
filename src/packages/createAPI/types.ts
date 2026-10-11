@@ -1,6 +1,4 @@
 export type RequestBody = string | FormData | null;
-export type CacheConfig = {key?: string; ttl: number; tags?: string[]};
-export type CacheEntry = {value: unknown; expiresAt: number};
 export type RetryOptions = {headers?: Headers; body?: RequestBody};
 
 export type Retry = (options?: RetryOptions) => Promise<Response>;
@@ -14,22 +12,37 @@ export type OnBeforeResult<T = any> = (props: OnBeforeResultProps) => Promise<T>
 export type OnErrorProps = {error: unknown; url: string; options: FetchProps; response?: Response; emitEvent: EmitEvent};
 export type OnError = (props: OnErrorProps) => Promise<void> | void;
 
-export type CacheStorage = {
-    get(key: string): Promise<string | null>;
-    set(key: string, value: string, ttl: number): Promise<void>;
-    delete(key: string): Promise<void>;
-    clear(): Promise<void>;
-};
-
 export type CreateAPIProps = {
     baseURL: string;
     throwException?: boolean;
     onBeforeRequest?: OnBeforeRequest;
     onAfterResponse?: OnAfterResponse;
     onError?: OnError;
-    cache?: APICacheDriver;
     maxRetries?: number;
+    /** Default `staleTime` (ms) for queries that don't set one. Defaults to 0: revalidate on every mount. */
+    staleTime?: number;
+    /** Default `cacheTime` (ms) for queries that don't set one. Defaults to 5 minutes. */
+    cacheTime?: number;
+    /**
+     * Your navigation library's focus hook, e.g. React Navigation's `useFocusEffect`.
+     * When given, a query revalidates on screen focus if its data is stale.
+     */
+    useFocusEffect?: UseFocusEffect;
+    /**
+     * Revalidate the stale or failed queries on screen when the app returns to the
+     * foreground (React Native `AppState`). Off by default.
+     */
+    revalidateOnAppForeground?: boolean;
+    /**
+     * Subscribes to connectivity changes and returns an unsubscribe function, e.g.
+     * `listener => NetInfo.addEventListener(state => listener(!!state.isConnected))`.
+     * When given, the stale or failed queries on screen revalidate when the network comes back.
+     */
+    subscribeToNetwork?: SubscribeToNetwork;
 };
+
+export type UseFocusEffect = (effect: () => undefined | void | (() => void)) => void;
+export type SubscribeToNetwork = (listener: (isConnected: boolean) => void) => () => void;
 
 export type FetchProps<T = any> = {
     method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
@@ -40,15 +53,91 @@ export type FetchProps<T = any> = {
     onAfterResponse?: OnAfterResponse;
     onBeforeResult?: OnBeforeResult<T>;
     signal?: AbortSignal;
-    cacheConfig?: CacheConfig;
     maxRetries?: number;
 };
 
 export type ValidationErrors = Record<string, string[]>;
 
-export interface APICacheDriver {
-    get<T>(key: string): Promise<T | undefined>;
-    set(key: string, value: unknown, ttl: number): Promise<void>;
-    delete(key: string): Promise<void>;
-    deleteAll(): Promise<void>;
-}
+export type QueryKey = readonly unknown[];
+export type Request = <T = any>(options: FetchProps<T>) => Promise<T>;
+
+export type QueryFunctionContext = {
+    /** `useAPI().request` without the loading state. */
+    request: Request;
+};
+
+export type UseQueryOptions<T> = {
+    queryKey: QueryKey;
+    queryFn: (context: QueryFunctionContext) => Promise<T>;
+    /** How long (ms) a result counts as fresh and is served with no request. Afterwards it is stale: still shown, but revalidated in the background on the next mount or focus. Defaults to `createAPI`'s `staleTime`. */
+    staleTime?: number;
+    /** How long (ms) a result stays in memory for reuse, including while stale. Defaults to `createAPI`'s `cacheTime`. */
+    cacheTime?: number;
+    /** Set to false to defer fetching until it becomes true or `refetch()` is called. */
+    enabled?: boolean;
+    /** While a new key loads, keep showing the previous key's data (e.g. page 1 while page 2 loads). */
+    keepPreviousData?: boolean;
+    onSuccess?: (data: T) => void;
+    onError?: (error: unknown) => void;
+};
+
+export type UseQueryResult<T> = {
+    data: T | undefined;
+    error: unknown;
+    /** True while fetching with nothing to show yet: the first load, or a new key without `keepPreviousData`. */
+    isLoading: boolean;
+    /** True whenever a request for this query is in flight, including refetches over existing data. */
+    isFetching: boolean;
+    /** True while `data` is the previous key's data, shown by `keepPreviousData` until the new key loads. */
+    isPlaceholderData: boolean;
+    /** Fetches again, ignoring the cache. */
+    refetch: () => Promise<void>;
+};
+
+/** A cached query result: fresh until `staleAt`, kept (and shown while revalidating) until `expiresAt`. */
+export type CacheEntry = {queryKey: QueryKey; data: unknown; staleAt: number; expiresAt: number};
+
+/** A `useQuery` instance on screen, as seen by invalidation and the app-foreground/reconnect listeners. */
+export type MountedQuery = {
+    queryKey: QueryKey;
+    isEnabled: () => boolean;
+    isFocused: () => boolean;
+    refetch: () => Promise<void>;
+    revalidate: () => Promise<void>;
+};
+
+/** One `useQuery` instance's state for the key it currently shows. */
+export type QueryState<T> = {
+    hash: string;
+    data: T | undefined;
+    error: unknown;
+    isFetching: boolean;
+    isFetchingNextPage: boolean;
+    isPlaceholderData: boolean;
+};
+
+/** What one fetch is for: reloading the data, or appending the next page of an infinite list. */
+export type FetchMode = 'refresh' | 'next';
+
+/** What the shared query engine returns; each public hook picks the fields it exposes. */
+export type CachedQueryResult<T> = UseQueryResult<T> & {isFetchingNextPage: boolean; fetchNext: () => Promise<void>};
+
+/** An infinite list's data: the pages loaded so far, and the param each page was fetched with. */
+export type InfiniteData<TPage, TPageParam> = {pages: TPage[]; pageParams: TPageParam[]};
+
+export type UseInfiniteQueryOptions<TPage, TPageParam> = Omit<UseQueryOptions<InfiniteData<TPage, TPageParam>>, 'queryFn' | 'keepPreviousData'> & {
+    /** Fetches one page; `pageParam` is `initialPageParam` for the first page, then what `getNextPageParam` returned. */
+    queryFn: (context: QueryFunctionContext & {pageParam: TPageParam}) => Promise<TPage>;
+    initialPageParam: TPageParam;
+    /** Returns the param for the page after `lastPage`, or `undefined` when there are no more pages. */
+    getNextPageParam: (lastPage: TPage, allPages: TPage[], lastPageParam: TPageParam) => TPageParam | undefined;
+};
+
+export type UseInfiniteQueryResult<TPage, TPageParam> = Omit<UseQueryResult<InfiniteData<TPage, TPageParam>>, 'isPlaceholderData'> & {
+    /** True when `getNextPageParam` returns a param for another page. */
+    hasNextPage: boolean;
+    /** True while the next page is loading (`isFetching` is also true). */
+    isFetchingNextPage: boolean;
+    /** Loads and appends the next page; does nothing without a next page or while a request is running. */
+    fetchNextPage: () => Promise<void>;
+};

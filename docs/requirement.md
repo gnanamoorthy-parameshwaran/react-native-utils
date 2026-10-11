@@ -9,10 +9,15 @@ implementation.
 ## 1. Background
 
 - The package already ships `createAPI` (`src/packages/createAPI`): a factory,
-  `createAPI({ baseURL, cache, throwException, onBeforeRequest, onAfterResponse, onError, maxRetries })`, whose
-  returned hook (`useAPI()`) exposes exactly `{ loading, request, invalidateCache }` — one
-  generic `request<T>(options)` and one `loading` flag per hook call. This replaced an older
-  `useAPI` shape (`Get/Post/Put/Patch/Delete` methods plus one loading flag per verb).
+  `createAPI({ baseURL, staleTime, cacheTime, throwException, onBeforeRequest, onAfterResponse, onError, maxRetries })`,
+  returning `{ useAPI, useQuery, useInfiniteQuery, invalidateQueries }`. `useAPI()` exposes exactly
+  `{ loading, request }`: one generic `request<T>(options)` and one `loading` flag per hook call,
+  with no caching. `useAPI` is the axios-like layer where requests are managed in one place
+  (base URL, headers/auth, retry, errors). Caching lives in the TanStack-inspired `useQuery`,
+  which pages compose themselves (§2.6).
+  This replaced an older `useAPI` shape (`Get/Post/Put/Patch/Delete` methods plus one loading
+  flag per verb), and in 2.0 the `cacheConfig`/`invalidateCache`/`invalidateCacheGroup` cache
+  API that `useAPI` used to carry.
 - `generateAPI` exists to stop hand-writing hooks like `useProduct()`/`useContact()` against
   `useAPI()` by hand, and instead generate them from the backend's own OpenAPI spec, keeping
   request/response types and endpoint wiring in sync with the API automatically.
@@ -21,8 +26,10 @@ implementation.
 
 ### 2.1 Target `useAPI` shape
 
-- Generated code must call the **new** `useAPI()` shape (`{ loading, request, invalidateCache }`),
+- Generated code must call the **new** `useAPI()` shape (`{ loading, request }`),
   not the old per-verb one.
+- The `useAPIImportPath` module must **default-export** `useAPI`; that is the only import
+  generated clients take from it.
 - Each generated method calls `useAPI()` **itself** (isolated loading per method) rather than
   sharing one `useAPI()` call across a whole file.
 
@@ -84,10 +91,8 @@ implementation.
   synthesizes canonical names: `get{Resource}s` (collection GET), `get{Resource}` (item GET),
   `create{Resource}` (POST), `update{Resource}` (PUT/PATCH), `delete{Resource}` (DELETE).
 - **Loading flag naming**: verb-gerund + the part of the method name that disambiguates it, e.g.
-  `getAddress` → `gettingAddress`, `updateAddress` → `patchingAddress`. Strips the leading verb
-  the same way for the cache-invalidate method name (§2.6), so it reads as `invalidateProducts`/
-  `invalidateProduct`, not `invalidateGetProducts`.
-- All of a file's `useAPI()` calls (and their loading/request/invalidate destructures) are
+  `getAddress` → `gettingAddress`, `updateAddress` → `patchingAddress`.
+- All of a file's `useAPI()` calls (and their loading/request destructures) are
   grouped together immediately after the function opens, **not** interleaved with each method's
   `React.useCallback` block.
 - **Object-props calling convention**: both the hook and every method take a single destructured
@@ -112,23 +117,23 @@ implementation.
 
 ### 2.6 Caching
 
-- Per-endpoint cache behavior is read from an `x-cache-config` OpenAPI vendor extension on the
-  operation, e.g. `{ "ttl": 300000, "tags": ["business-units"] }` (`ttl` in milliseconds; `tags`
-  optional).
-- Applies to any `GET` operation, including ones with query parameters — the generated cache key
-  folds the query string in (`getCacheKey({ method, endpoint, query })`), so distinct params
-  combinations (e.g. each paginated page or filter) cache under distinct keys instead of colliding.
-- When present, the generated method's `request()` call gets a `cacheConfig: { ttl, key, tags? }`
-  (key computed via `createAPI`'s exported `getCacheKey`), and a companion `invalidate{Resource}`
-  method is generated next to it, taking the same path/query params and recomputing the identical
-  cache key to call `invalidateCache` — clearing only that one exact variant.
-- If one or more operations declare the same `tags` entry, one `invalidate{Tag}Group()` helper is
-  emitted per unique tag (deduplicated across the whole client file, not once per operation) that
-  clears every cached entry carrying that tag at once — the way to invalidate every page/filter
-  variant of a cached list after a mutation, since the per-operation `invalidate{Resource}` alone
-  only ever clears one exact key. Backed by `TaggedCacheDriver`
-  (`src/packages/createAPI/drivers/TaggedCacheDriver.ts`), which any `APICacheDriver` is wrapped in
-  automatically inside `createAPI()` — no driver-specific support needed.
+- The generator emits **API clients only**. It produces no query hooks, invalidate helpers or
+  cache options, because it can't know which query keys a page will choose.
+- Caching is composed at **page level** with `useQuery` from `createAPI`,
+  calling generated client methods inside `queryFn`:
+
+  ```ts
+  const {getInvoices} = useInvoice({businessUnit});
+  const {data} = useQuery({
+      queryKey: ['invoices', {businessUnit, page}],
+      queryFn: () => getInvoices({params: {page}}),
+      staleTime: 300_000,
+  });
+  // later: invalidateQueries(['invoices']) clears every page
+  ```
+
+- Query keys match by prefix, so `['invoices']` invalidates every `['invoices', …]` entry.
+- An `x-cache-config` vendor extension in the spec is ignored.
 
 ### 2.7 Custom generators (user-defined output structure)
 
@@ -185,7 +190,6 @@ src/packages/generateAPI/
 │   ├── ParameterResolver.ts          # path/query params, hook-vs-method split + group reconciliation
 │   ├── RequestBodyResolver.ts        # JSON / multipart body -> usable type expression
 │   ├── ResponseResolver.ts           # success response schema -> response type (full envelope)
-│   ├── CacheResolver.ts             # x-cache-config vendor extension
 │   ├── DocResolver.ts               # summary/description/deprecation/tag docs
 │   └── TypeResolver.ts              # OpenAPI Schema -> TS type text ($ref/array/enum/union/nullable-aware)
 ├── generators/
@@ -230,7 +234,7 @@ touching this package at all (§2.7) — nothing on the parsing side changes eit
 1. `OperationParser.parse()` builds the `ParsedAPI` IR: a `schemaGroups` map (`schema key ->
    resource group name`) from `components.schemas`, plus every `(path, method)` resolved into a
    `ResolvedOperation` — version/folder/resource/method naming, path/query params, request body
-   (JSON or `multipart/form-data`), response type, and cache config (§2.6) — each concern handled
+   (JSON or `multipart/form-data`) and response type — each concern handled
    by its own resolver class.
 2. `resolveDriver()` picks the generator from `config.framework`: a built-in driver class, or a
    user module loaded with dynamic `import()` and called as a factory with the
@@ -270,73 +274,52 @@ alongside the normal `bob build`.
 ### 3.6 Sample generated output
 
 ```ts
-// {clientOutputDir}/V1/BusinessUnit/useExpense.ts
+// {clientOutputDir}/V1/BusinessUnit/useInvoice.ts
 import React from 'react';
 import useAPI from '../../../../hooks/useAPI';
-import {getCacheKey} from '@gnanamoorthy/react-native-utils';
-import type {BusinessUnitGetExpensesResponse, CreateExpenseResponse, UpdateExpenseRequest} from '../../../types/Expense';
+import type {GetInvoicesResponse, CreateInvoiceResponse, CreateInvoiceRequest} from '../../../types/Invoice';
 
-export default function useExpense({businessUnit}: {businessUnit: number}) {
-    const {loading: gettingExpenses, request: getExpensesRequest, invalidateCache: invalidateExpensesCache} = useAPI();
-    const {loading: postingExpense, request: createExpenseRequest} = useAPI();
+export default function useInvoice({businessUnit}: {businessUnit: number}) {
+    const {loading: gettingInvoices, request: getInvoicesRequest} = useAPI();
+    const {loading: postingInvoice, request: createInvoiceRequest} = useAPI();
 
-    const getExpenses = React.useCallback(() => {
-        return getExpensesRequest<BusinessUnitGetExpensesResponse>({
-            method: 'GET',
-            endpoint: `/v1/business-units/${businessUnit}/expenses`,
-            cacheConfig: {
-                ttl: 300000,
-                key: getCacheKey({
-                    method: 'GET',
-                    endpoint: `/v1/business-units/${businessUnit}/expenses`,
-                }),
-            },
-        });
-    }, [getExpensesRequest, businessUnit]);
-
-    const invalidateExpenses = React.useCallback(() => {
-        return invalidateExpensesCache(
-            getCacheKey({
+    const getInvoices = React.useCallback(
+        ({params}: {params?: {page?: number}} = {}) => {
+            const query = params ? `?${new URLSearchParams(params as Record<string, string>).toString()}` : '';
+            return getInvoicesRequest<GetInvoicesResponse>({
                 method: 'GET',
-                endpoint: `/v1/business-units/${businessUnit}/expenses`,
-            }),
-        );
-    }, [invalidateExpensesCache, businessUnit]);
+                endpoint: `/api/v1/business-units/${businessUnit}/invoices${query}`,
+            });
+        },
+        [getInvoicesRequest, businessUnit],
+    );
 
-    const createExpense = React.useCallback(
-        ({body}: {body: UpdateExpenseRequest}) => {
-            return createExpenseRequest<CreateExpenseResponse>({
+    const createInvoice = React.useCallback(
+        ({body}: {body: CreateInvoiceRequest}) => {
+            return createInvoiceRequest<CreateInvoiceResponse>({
                 method: 'POST',
-                endpoint: `/v1/business-units/${businessUnit}/expenses`,
+                endpoint: `/api/v1/business-units/${businessUnit}/invoices`,
                 body: JSON.stringify(body),
                 headers: new Headers({'Content-Type': 'application/json'}),
             });
         },
-        [createExpenseRequest, businessUnit],
+        [createInvoiceRequest, businessUnit],
     );
 
-    return {
-        gettingExpenses,
-        getExpenses,
-        invalidateExpenses,
-        postingExpense,
-        createExpense,
-    };
+    return {gettingInvoices, getInvoices, postingInvoice, createInvoice};
 }
 ```
 
-Note `businessUnit` is a **parent** id here (`/business-units/{businessUnit}/expenses`), so it's
+Note `businessUnit` is a **parent** id here (`/business-units/{businessUnit}/invoices`), so it's
 bound on the hook and required (every operation in this file needs it) — a resource with its own
-trailing id (e.g. `getExpense({ expense })`) would bind it on the method instead (§2.5).
+trailing id (e.g. `getInvoice({ invoice })`) would bind it on the method instead (§2.5).
 
 ### 3.7 Known scope limits
 
-- Cache TTL is a single static value per endpoint from the spec; it is not derived from the
-  actual `Cache-Control` response header at request time.
-- Mutations never auto-invalidate a tag group — `invalidate{Tag}Group()` (§2.6) has to be called
-  explicitly after a successful POST/PUT/PATCH/DELETE; there is no `x-cache-invalidate`-style
-  extension wiring that up automatically (deliberate: kept explicit rather than adding implicit
-  cross-operation coupling).
+- Query caching is in memory with stale-while-revalidate (`staleTime` / `cacheTime`). Revalidation on
+  screen focus, app foreground and network reconnect is opt-in (`useFocusEffect`,
+  `revalidateOnAppForeground`, `subscribeToNetwork`). `useInfiniteQuery` loads forward only and reloads
+  only the first page on refresh. No persistence across app restarts.
 - Only the React driver is implemented. The framework seam exists (`FrameworkGenerator` contract,
   framework-neutral `ParsedAPI` IR, `config.framework` selection), but a Vue driver hasn't been
   written yet — there is also no Vue equivalent of the `createAPI`/`useAPI` runtime to generate

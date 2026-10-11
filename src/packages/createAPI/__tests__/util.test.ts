@@ -1,34 +1,51 @@
-import {getCacheKey} from '../util';
+import {hashKey, matchKey, replaceEqualDeep} from '../util';
 
-describe('getCacheKey', () => {
-    it('defaults the method to GET and needs no query', () => {
-        expect(getCacheKey({method: undefined, endpoint: '/v1/things'})).toBe('GET:/v1/things');
+describe('hashKey', () => {
+    it('ignores object key order', () => {
+        expect(hashKey(['posts', {page: 1, sort: 'asc'}])).toBe(hashKey(['posts', {sort: 'asc', page: 1}]));
     });
 
-    it('builds a plain method:endpoint key when there is no query', () => {
-        expect(getCacheKey({method: 'GET', endpoint: '/v1/business-units'})).toBe('GET:/v1/business-units');
+    it('keeps array order significant', () => {
+        expect(hashKey(['a', 'b'])).not.toBe(hashKey(['b', 'a']));
+    });
+});
+
+describe('matchKey', () => {
+    it('matches by prefix', () => {
+        expect(matchKey(['posts', {page: 2}], ['posts'])).toBe(true);
+        expect(matchKey(['users'], ['posts'])).toBe(false);
     });
 
-    it('treats an empty query object the same as no query', () => {
-        expect(getCacheKey({method: 'GET', endpoint: '/v1/business-units', query: {}})).toBe('GET:/v1/business-units');
+    it('matches object segments partially', () => {
+        expect(matchKey(['posts', {userId: 1, page: 2}], ['posts', {userId: 1}])).toBe(true);
+        expect(matchKey(['posts', {userId: 2, page: 2}], ['posts', {userId: 1}])).toBe(false);
+    });
+});
+
+describe('replaceEqualDeep', () => {
+    it('returns the previous reference when the new value is deep-equal', () => {
+        const previous = {list: [{id: 1}, {id: 2}], meta: {page: 1}};
+        expect(replaceEqualDeep(previous, JSON.parse(JSON.stringify(previous)))).toBe(previous);
     });
 
-    it('appends a single query param', () => {
-        expect(getCacheKey({method: 'GET', endpoint: '/v1/business-units', query: {page: '2'}})).toBe('GET:/v1/business-units?page=2');
+    it('reuses unchanged parts and replaces changed ones', () => {
+        const previous = {list: [{id: 1}, {id: 2, title: 'a'}], meta: {page: 1}};
+        const next = replaceEqualDeep(previous, {list: [{id: 1}, {id: 2, title: 'b'}], meta: {page: 1}});
+
+        expect(next).not.toBe(previous);
+        expect(next.meta).toBe(previous.meta);
+        expect(next.list[0]).toBe(previous.list[0]);
+        expect(next.list[1]).toEqual({id: 2, title: 'b'});
     });
 
-    it('sorts query params by key so param insertion order never changes the key', () => {
-        const a = getCacheKey({method: 'GET', endpoint: '/v1/things', query: {page: '2', per_page: '15'}});
-        const b = getCacheKey({method: 'GET', endpoint: '/v1/things', query: {per_page: '15', page: '2'}});
-
-        expect(a).toBe(b);
-        expect(a).toBe('GET:/v1/things?page=2&per_page=15');
+    it('treats added or removed keys and items as a change', () => {
+        expect(replaceEqualDeep({a: 1, b: 2}, {a: 1})).toEqual({a: 1});
+        expect(replaceEqualDeep([1, 2], [1, 2, 3])).toEqual([1, 2, 3]);
     });
 
-    it('keys distinct pages of the same paginated endpoint differently', () => {
-        const page1 = getCacheKey({method: 'GET', endpoint: '/v1/business-units', query: {page: '1'}});
-        const page2 = getCacheKey({method: 'GET', endpoint: '/v1/business-units', query: {page: '2'}});
-
-        expect(page1).not.toBe(page2);
+    it('compares anything other than plain objects and arrays by identity', () => {
+        const date = new Date(0);
+        expect(replaceEqualDeep(new Date(0), date)).toBe(date);
+        expect(replaceEqualDeep(undefined, 'value')).toBe('value');
     });
 });

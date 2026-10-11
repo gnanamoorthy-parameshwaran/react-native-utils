@@ -6,6 +6,7 @@ import crypto from 'crypto';
 import {execSync} from 'child_process';
 import GeneratorManager from '../generators/GeneratorManager.ts';
 import ConfigLoader from '../support/ConfigLoader.ts';
+import SkillInstaller from '../support/SkillInstaller.ts';
 import type {ClientGeneratorConfig} from '../types/Config.ts';
 import type {OpenAPI} from '../types/OpenAPISpec.ts';
 
@@ -50,8 +51,20 @@ function formatGeneratedOutput(config: ClientGeneratorConfig) {
     }
 }
 
+function addSkill(args: string[]) {
+    const dirFlagIndex = args.indexOf('--dir');
+    const skillsDir = dirFlagIndex !== -1 ? args[dirFlagIndex + 1] : '.claude/skills';
+    if (!skillsDir) throw new Error('--dir needs a path, e.g. --dir .claude/skills');
+
+    const destination = new SkillInstaller().install(skillsDir);
+    console.log(`Installed the ${SkillInstaller.SKILL_NAME} skill to ${path.relative(process.cwd(), destination) || destination}.`);
+    console.log('Commit it so everyone on the project gets it, and re-run this command after upgrading the package.');
+}
+
 function printUsage() {
-    console.log('Usage: react-native-utils generate-client [--config <path>]');
+    console.log('Usage:');
+    console.log('  react-native-utils generate-client [--config <path>]');
+    console.log('  react-native-utils add-skill [--dir <skills directory, default .claude/skills>]');
 }
 
 async function main() {
@@ -60,6 +73,11 @@ async function main() {
     if (subcommand === 'generate-client') {
         await generateClient(rest);
         console.log('Client generation complete.');
+        return;
+    }
+
+    if (subcommand === 'add-skill') {
+        addSkill(rest);
         return;
     }
 

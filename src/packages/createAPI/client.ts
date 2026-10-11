@@ -10,6 +10,7 @@ import type {
     EmitEvent,
     FetchProps,
     MountedQuery,
+    QueryFunctionContext,
     QueryKey,
     QueryState,
     RequestBody,
@@ -218,16 +219,31 @@ export default function createAPI({
         if (keepFor > 0) cache.set(hash, {queryKey, data, staleAt: now + staleTime, expiresAt: now + keepFor});
     }
 
-    function useQuery<T>({
+    /**
+     * The engine shared by the query hooks: per-key state, fresh/stale cache
+     * reads, deduplicated fetching, structural sharing, the stale-response guard
+     * and registration for invalidation, focus, foreground and reconnect. The
+     * hooks differ only in `fetcher`, i.e. what one fetch produces.
+     */
+    function useCachedQuery<T>({
         queryKey,
-        queryFn,
-        staleTime = defaultStaleTime,
-        cacheTime = defaultCacheTime,
-        enabled = true,
-        keepPreviousData = false,
+        fetcher,
+        staleTime,
+        cacheTime,
+        enabled,
+        keepPreviousData,
         onSuccess,
-        onError: onQueryError,
-    }: UseQueryOptions<T>): UseQueryResult<T> {
+        onQueryError,
+    }: {
+        queryKey: QueryKey;
+        fetcher: (context: QueryFunctionContext) => Promise<T>;
+        staleTime: number;
+        cacheTime: number;
+        enabled: boolean;
+        keepPreviousData: boolean;
+        onSuccess?: (data: T) => void;
+        onQueryError?: (error: unknown) => void;
+    }): UseQueryResult<T> {
         const {emitEvent} = React.useContext(APIContext);
         const hash = hashKey(queryKey);
 
@@ -251,9 +267,9 @@ export default function createAPI({
         const [state, setState] = React.useState<QueryState<T>>(() => stateForKey());
         if (state.hash !== hash) setState(stateForKey(state));
 
-        /** The latest props, read when a fetch starts, so inline `queryFn`/callbacks are always current. */
-        const latest = React.useRef({queryKey, queryFn, staleTime, cacheTime, enabled, onSuccess, onQueryError, emitEvent});
-        latest.current = {queryKey, queryFn, staleTime, cacheTime, enabled, onSuccess, onQueryError, emitEvent};
+        /** The latest props, read when a fetch starts, so inline fetchers/callbacks are always current. */
+        const latest = React.useRef({queryKey, fetcher, staleTime, cacheTime, enabled, onSuccess, onQueryError, emitEvent});
+        latest.current = {queryKey, fetcher, staleTime, cacheTime, enabled, onSuccess, onQueryError, emitEvent};
 
         const currentHash = React.useRef(hash);
         currentHash.current = hash;
@@ -287,7 +303,7 @@ export default function createAPI({
                     }
                 }
 
-                const {queryKey: key, queryFn: fn, onSuccess: success, onQueryError: failure, emitEvent: emit} = latest.current;
+                const {queryKey: key, fetcher: fn, onSuccess: success, onQueryError: failure, emitEvent: emit} = latest.current;
                 const times = {staleTime: latest.current.staleTime, cacheTime: latest.current.cacheTime};
                 setState(previous => ({...previous, isFetching: true}));
 
@@ -372,6 +388,19 @@ export default function createAPI({
             isPlaceholderData: state.isPlaceholderData,
             refetch,
         };
+    }
+
+    function useQuery<T>({
+        queryKey,
+        queryFn,
+        staleTime = defaultStaleTime,
+        cacheTime = defaultCacheTime,
+        enabled = true,
+        keepPreviousData = false,
+        onSuccess,
+        onError: onQueryError,
+    }: UseQueryOptions<T>): UseQueryResult<T> {
+        return useCachedQuery({queryKey, fetcher: queryFn, staleTime, cacheTime, enabled, keepPreviousData, onSuccess, onQueryError});
     }
 
     /**

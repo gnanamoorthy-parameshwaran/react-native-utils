@@ -28,9 +28,21 @@ export type CreateAPIProps = {
      * When given, a query revalidates on screen focus if its data is stale.
      */
     useFocusEffect?: UseFocusEffect;
+    /**
+     * Revalidate the stale or failed queries on screen when the app returns to the
+     * foreground (React Native `AppState`). Off by default.
+     */
+    revalidateOnAppForeground?: boolean;
+    /**
+     * Subscribes to connectivity changes and returns an unsubscribe function, e.g.
+     * `listener => NetInfo.addEventListener(state => listener(!!state.isConnected))`.
+     * When given, the stale or failed queries on screen revalidate when the network comes back.
+     */
+    subscribeToNetwork?: SubscribeToNetwork;
 };
 
 export type UseFocusEffect = (effect: () => undefined | void | (() => void)) => void;
+export type SubscribeToNetwork = (listener: (isConnected: boolean) => void) => () => void;
 
 export type FetchProps<T = any> = {
     method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';

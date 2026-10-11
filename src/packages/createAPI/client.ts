@@ -1,4 +1,5 @@
 import React from 'react';
+import {AppState} from 'react-native';
 
 import APIContext from './context/APIContext';
 import {hashKey, matchKey, parseResponseBody, replaceEqualDeep, validateAndThrowExceptions} from './util';
@@ -6,7 +7,13 @@ import {hashKey, matchKey, parseResponseBody, replaceEqualDeep, validateAndThrow
 import type {CreateAPIProps, EmitEvent, FetchProps, QueryKey, RequestBody, Retry, UseQueryOptions, UseQueryResult} from './types';
 
 type CacheEntry = {queryKey: QueryKey; data: unknown; staleAt: number; expiresAt: number};
-type MountedQuery = {queryKey: QueryKey; isEnabled: () => boolean; isFocused: () => boolean; refetch: () => Promise<void>};
+type MountedQuery = {
+    queryKey: QueryKey;
+    isEnabled: () => boolean;
+    isFocused: () => boolean;
+    refetch: () => Promise<void>;
+    revalidate: () => Promise<void>;
+};
 type QueryState<T> = {hash: string; data: T | undefined; error: unknown; isFetching: boolean; isPlaceholderData: boolean};
 
 /** Stand-in when no focus hook is passed to `createAPI`, so `useQuery` calls the same hooks every render. */
@@ -31,6 +38,8 @@ export default function createAPI({
     staleTime: defaultStaleTime = 0,
     cacheTime: defaultCacheTime = DEFAULT_CACHE_TIME,
     useFocusEffect = noFocusEffect,
+    revalidateOnAppForeground = false,
+    subscribeToNetwork,
 }: CreateAPIProps) {
     /**
      * The request pipeline shared by `useAPI` and `useQuery`: global and
@@ -101,6 +110,63 @@ export default function createAPI({
 
     /** Every mounted `useQuery`, so invalidation can refetch the ones that are visible. */
     const mounted = new Set<MountedQuery>();
+
+    /**
+     * Revalidates the visible queries (mounted, enabled and focused) whose data
+     * is stale or missing; fresh data is left alone. Runs when the app returns to
+     * the foreground or the network comes back, if those are opted in.
+     */
+    function revalidateVisible(): void {
+        mounted.forEach(query => {
+            if (query.isEnabled() && query.isFocused()) query.revalidate();
+        });
+    }
+
+    let appState = AppState.currentState;
+    let isConnected = true;
+    let stopListening: (() => void) | undefined;
+
+    /**
+     * Attaches the opted-in app-foreground and network listeners. They only
+     * matter while a query is on screen, so they are attached when the first
+     * query mounts and removed when the last one unmounts.
+     */
+    function startListening(): () => void {
+        const stops: (() => void)[] = [];
+
+        if (revalidateOnAppForeground) {
+            appState = AppState.currentState;
+            const subscription = AppState.addEventListener('change', next => {
+                if (appState !== 'active' && next === 'active') revalidateVisible();
+                appState = next;
+            });
+            stops.push(() => subscription.remove());
+        }
+
+        if (subscribeToNetwork) {
+            stops.push(
+                subscribeToNetwork(connected => {
+                    if (connected && !isConnected) revalidateVisible();
+                    isConnected = connected;
+                }),
+            );
+        }
+
+        return () => stops.forEach(stop => stop());
+    }
+
+    function addMounted(query: MountedQuery): void {
+        mounted.add(query);
+        if (mounted.size === 1) stopListening = startListening();
+    }
+
+    function removeMounted(query: MountedQuery): void {
+        mounted.delete(query);
+        if (mounted.size === 0) {
+            stopListening?.();
+            stopListening = undefined;
+        }
+    }
 
     /**
      * Requests currently running, by key hash. A fetch for a key that is already
@@ -291,11 +357,10 @@ export default function createAPI({
                 isEnabled: () => latest.current.enabled,
                 isFocused: () => isFocused.current,
                 refetch: () => fetchData(true),
+                revalidate: () => fetchData(false),
             };
-            mounted.add(entry);
-            return () => {
-                mounted.delete(entry);
-            };
+            addMounted(entry);
+            return () => removeMounted(entry);
         }, [fetchData]);
 
         const refetch = React.useCallback(() => fetchData(true), [fetchData]);

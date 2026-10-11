@@ -11,12 +11,17 @@ declare function getToken(): Promise<string>;
 declare function refreshToken(): Promise<void>;
 declare function reportError(error: unknown, url: string): void;
 
+/** Stands in for `import NetInfo from '@react-native-community/netinfo'`. */
+declare const NetInfo: {addEventListener: (listener: (state: {isConnected: boolean | null}) => void) => () => void};
+
 const {useAPI, useQuery, invalidateQueries} = createAPI({
     baseURL: 'https://api.example.com',
     throwException: true,
     maxRetries: 1,
     staleTime: 60_000,
     useFocusEffect,
+    revalidateOnAppForeground: true,
+    subscribeToNetwork: listener => NetInfo.addEventListener(state => listener(!!state.isConnected)),
     onBeforeRequest: async ({headers}) => {
         headers.set('Accept', 'application/json');
         headers.set('Authorization', `Bearer ${await getToken()}`);

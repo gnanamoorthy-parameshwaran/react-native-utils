@@ -1,11 +1,11 @@
 import React from 'react';
-import {Text} from 'react-native';
+import {AppState, Text} from 'react-native';
 import {act, render, renderHook, waitFor} from '@testing-library/react-native';
 
 import createAPI from '../client';
 import {hashKey} from '../util';
 
-import type {UseFocusEffect} from '../types';
+import type {SubscribeToNetwork, UseFocusEffect} from '../types';
 
 const flush = () => act(() => new Promise<void>(resolve => setTimeout(resolve, 0)));
 
@@ -411,5 +411,117 @@ describe('useQuery with useFocusEffect', () => {
         await detailScreen.blur();
         await listScreen.focus();
         await waitFor(() => expect(listFn).toHaveBeenCalledTimes(2));
+    });
+});
+
+describe('useQuery revalidation on app foreground and network reconnect', () => {
+    type AppStateHandler = (state: string) => void;
+
+    /** Captures the AppState listener the library attaches, so the test can drive state changes. */
+    function mockAppState() {
+        const handlers: AppStateHandler[] = [];
+        const remove = jest.fn();
+        Object.defineProperty(AppState, 'currentState', {value: 'active', configurable: true});
+        jest.mocked(AppState.addEventListener).mockImplementation(((_type: string, handler: AppStateHandler) => {
+            handlers.push(handler);
+            return {remove};
+        }) as unknown as typeof AppState.addEventListener);
+        const change = (state: string) => act(async () => handlers.forEach(handler => handler(state)));
+        return {change, remove, handlers};
+    }
+
+    /** A stand-in for a connectivity library: the test decides when the network goes up or down. */
+    function mockNetwork() {
+        const listeners = new Set<(isConnected: boolean) => void>();
+        const subscribeToNetwork: SubscribeToNetwork = listener => {
+            listeners.add(listener);
+            return () => listeners.delete(listener);
+        };
+        const setConnected = (connected: boolean) => act(async () => listeners.forEach(listener => listener(connected)));
+        return {subscribeToNetwork, setConnected, listeners};
+    }
+
+    afterEach(() => {
+        jest.mocked(AppState.addEventListener).mockReset();
+    });
+
+    it('revalidates stale queries on screen when the app returns to the foreground, leaving fresh ones alone', async () => {
+        const appState = mockAppState();
+        const {useQuery} = createAPI({baseURL: 'https://example.test', revalidateOnAppForeground: true});
+        const staleFn = jest.fn(async () => 'stale');
+        const freshFn = jest.fn(async () => 'fresh');
+
+        const stale = renderHook(() => useQuery({queryKey: ['stale'], queryFn: staleFn, staleTime: 0}));
+        const fresh = renderHook(() => useQuery({queryKey: ['fresh'], queryFn: freshFn, staleTime: 60_000}));
+        await waitFor(() => expect(stale.result.current.data).toBe('stale'));
+        await waitFor(() => expect(fresh.result.current.data).toBe('fresh'));
+
+        await appState.change('background');
+        expect(staleFn).toHaveBeenCalledTimes(1);
+
+        await appState.change('active');
+        await waitFor(() => expect(staleFn).toHaveBeenCalledTimes(2));
+        expect(freshFn).toHaveBeenCalledTimes(1);
+        await waitFor(() => expect(stale.result.current.isFetching).toBe(false));
+    });
+
+    it('does not listen to AppState unless opted in', async () => {
+        mockAppState();
+        const {useQuery} = createAPI({baseURL: 'https://example.test'});
+
+        const query = renderHook(() => useQuery({queryKey: ['plain'], queryFn: async () => 'data'}));
+        await waitFor(() => expect(query.result.current.data).toBe('data'));
+        expect(AppState.addEventListener).not.toHaveBeenCalled();
+    });
+
+    it('retries a query that failed while offline once the network comes back', async () => {
+        const network = mockNetwork();
+        const {useQuery} = createAPI({baseURL: 'https://example.test', subscribeToNetwork: network.subscribeToNetwork});
+        const queryFn = jest.fn().mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce('online');
+
+        const query = renderHook(() => useQuery<string>({queryKey: ['net'], queryFn}));
+        await waitFor(() => expect(query.result.current.error).toEqual(new Error('offline')));
+
+        await network.setConnected(false);
+        await network.setConnected(true);
+        await waitFor(() => expect(query.result.current).toMatchObject({data: 'online', error: null}));
+        expect(queryFn).toHaveBeenCalledTimes(2);
+    });
+
+    it('ignores network events that are not an offline to online transition', async () => {
+        const network = mockNetwork();
+        const {useQuery} = createAPI({baseURL: 'https://example.test', subscribeToNetwork: network.subscribeToNetwork});
+        const queryFn = jest.fn(async () => 'data');
+
+        const query = renderHook(() => useQuery({queryKey: ['steady'], queryFn}));
+        await waitFor(() => expect(query.result.current.data).toBe('data'));
+
+        await network.setConnected(true);
+        await network.setConnected(true);
+        expect(queryFn).toHaveBeenCalledTimes(1);
+    });
+
+    it('attaches listeners with the first mounted query and removes them with the last', async () => {
+        const appState = mockAppState();
+        const network = mockNetwork();
+        const {useQuery} = createAPI({
+            baseURL: 'https://example.test',
+            revalidateOnAppForeground: true,
+            subscribeToNetwork: network.subscribeToNetwork,
+        });
+        expect(appState.handlers).toHaveLength(0);
+        expect(network.listeners.size).toBe(0);
+
+        const first = renderHook(() => useQuery({queryKey: ['a'], queryFn: async () => 'a'}));
+        const second = renderHook(() => useQuery({queryKey: ['b'], queryFn: async () => 'b'}));
+        await waitFor(() => expect(second.result.current.data).toBe('b'));
+        expect(appState.handlers).toHaveLength(1);
+        expect(network.listeners.size).toBe(1);
+
+        first.unmount();
+        expect(appState.remove).not.toHaveBeenCalled();
+        second.unmount();
+        expect(appState.remove).toHaveBeenCalledTimes(1);
+        expect(network.listeners.size).toBe(0);
     });
 });

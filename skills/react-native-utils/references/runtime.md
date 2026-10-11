@@ -22,17 +22,19 @@ One `createAPI({...})` call per app, re-exported from a project file (convention
 
 `createAPI` options:
 
-| Option                                                   | Purpose                                                                             |
-| -------------------------------------------------------- | ----------------------------------------------------------------------------------- |
-| `baseURL`                                                | Prefixed to every `endpoint`                                                        |
-| `onBeforeRequest({headers, emitEvent})`                  | Return `{headers}`; e.g. attach the auth token                                      |
-| `onAfterResponse({response, retry, attempt, emitEvent})` | Return a `Response`; call `retry()` to resend, e.g. after refreshing a token on 401 |
-| `maxRetries`                                             | Upper bound for `retry()` (default 1)                                               |
-| `throwException`                                         | Throw typed `API*Error` classes on non-2xx instead of returning the body            |
-| `onError({error, url, options, response, emitEvent})`    | Central error reporting; the error is rethrown afterwards                           |
-| `staleTime` | Default `staleTime` (ms) for queries that don't set one; default 0 = revalidate on every mount |
-| `cacheTime` | Default `cacheTime` (ms) for queries that don't set one; default 5 minutes |
-| `useFocusEffect`                                         | Optional focus hook, e.g. React Navigation's, for focus-aware queries               |
+| Option                                                   | Purpose                                                                                                                                                           |
+| -------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `baseURL`                                                | Prefixed to every `endpoint`                                                                                                                                      |
+| `onBeforeRequest({headers, emitEvent})`                  | Return `{headers}`; e.g. attach the auth token                                                                                                                    |
+| `onAfterResponse({response, retry, attempt, emitEvent})` | Return a `Response`; call `retry()` to resend, e.g. after refreshing a token on 401                                                                               |
+| `maxRetries`                                             | Upper bound for `retry()` (default 1)                                                                                                                             |
+| `throwException`                                         | Throw typed `API*Error` classes on non-2xx instead of returning the body                                                                                          |
+| `onError({error, url, options, response, emitEvent})`    | Central error reporting; the error is rethrown afterwards                                                                                                         |
+| `staleTime`                                              | Default `staleTime` (ms) for queries that don't set one; default 0 = revalidate on every mount                                                                    |
+| `cacheTime`                                              | Default `cacheTime` (ms) for queries that don't set one; default 5 minutes                                                                                        |
+| `useFocusEffect`                                         | Optional focus hook, e.g. React Navigation's, for focus-aware queries                                                                                             |
+| `revalidateOnAppForeground`                              | Opt-in: revalidate stale or failed queries on screen when the app returns to the foreground (React Native `AppState`)                                             |
+| `subscribeToNetwork`                                     | Opt-in: `listener => NetInfo.addEventListener(state => listener(!!state.isConnected))`; revalidates stale or failed queries on screen when the network comes back |
 
 Wrap the app root in `APIContextWrapper emitEvent={...}` so `emitEvent` reaches a handler (e.g. to log
 out when a session expires).
@@ -90,11 +92,11 @@ matching queries that are mounted, enabled and focused refetch.
 ## Behaviour (for debugging)
 
 - The cache is a flat `Map<hashKey(queryKey), {queryKey, data, staleAt, expiresAt}>`, in memory only.
-  - Fresh (before `staleAt`): served with no request.
-  - Stale (until `expiresAt`): shown immediately with `isFetching: true` while a background request
-    revalidates it, on mount, focus or `refetch()`.
-  - Expired (after `expiresAt` = `max(staleTime, cacheTime)`): dropped on read and by the sweep that
-    runs before every cache write; the next mount starts blank. With both times 0 nothing is stored.
+    - Fresh (before `staleAt`): served with no request.
+    - Stale (until `expiresAt`): shown immediately with `isFetching: true` while a background request
+      revalidates it, on mount, focus or `refetch()`.
+    - Expired (after `expiresAt` = `max(staleTime, cacheTime)`): dropped on read and by the sweep that
+      runs before every cache write; the next mount starts blank. With both times 0 nothing is stored.
 - `invalidateQueries` marks matching entries stale (it doesn't delete them), so an unmounted screen
   shows its old data on the next mount while it revalidates.
 - Components on the same key share one in-flight request (`inflight` map). Invalidation drops
@@ -106,6 +108,11 @@ matching queries that are mounted, enabled and focused refetch.
 - A key change reads that key's own cache entry. Without `keepPreviousData`, an uncached key starts
   with `data: undefined`.
 - `onSuccess` fires only after a network fetch, not on a cache hit.
+- App foreground and reconnect (only when `revalidateOnAppForeground` / `subscribeToNetwork` are
+  set): on a background → active or offline → online transition, every query on screen (mounted,
+  enabled, focused) whose data is stale or missing revalidates; fresh data is left alone. A query
+  that failed while offline has no data, so it retries. Listeners are attached while at least one
+  query is mounted.
 - Focus (only when `useFocusEffect` is passed to `createAPI`):
     - on focus, a query revalidates only if its data is stale or gone; disabled queries are skipped
     - `invalidateQueries` refetches only focused queries; background screens keep their data, marked

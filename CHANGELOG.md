@@ -1,5 +1,33 @@
 # Changelog
 
+# [2.0.0](https://github.com/gnanamoorthy-parameshwaran/react-native-utils/compare/v1.4.0...v2.0.0) (2026-10-11)
+
+
+* feat(createAPI)!: add cached useQuery and invalidateQueries ([f0c5686](https://github.com/gnanamoorthy-parameshwaran/react-native-utils/commit/f0c5686cf604a94fb409e69ed4eeff2b9ca1bf51))
+* refactor(generateAPI)!: emit API clients only ([039e725](https://github.com/gnanamoorthy-parameshwaran/react-native-utils/commit/039e7257f6e2ed9196644be46f50d2a08b552f02))
+
+
+### Features
+
+* **createAPI:** add useInfiniteQuery for append-as-you-scroll lists ([8061821](https://github.com/gnanamoorthy-parameshwaran/react-native-utils/commit/806182124dafab8bf8c3e19750c17b29197ab75c))
+* **createAPI:** drop expired cache entries on every write ([04d0ec9](https://github.com/gnanamoorthy-parameshwaran/react-native-utils/commit/04d0ec91cc7abc8889dc2bee227482631a086bd8))
+* **createAPI:** keep the previous page on screen while paginating ([925e11a](https://github.com/gnanamoorthy-parameshwaran/react-native-utils/commit/925e11ace89d4436ec1d20a53eadd5833f69aec6))
+* **createAPI:** refetch queries on screen focus via an injected useFocusEffect ([383e341](https://github.com/gnanamoorthy-parameshwaran/react-native-utils/commit/383e341e87f0c80379f30f1a5bdd9e1da613b1ac))
+* **createAPI:** revalidate on app foreground and network reconnect ([48c6e2b](https://github.com/gnanamoorthy-parameshwaran/react-native-utils/commit/48c6e2bb8612d9da1e9005b6cf13222dc2b741b7))
+* **createAPI:** revalidate stale query data in the background ([aeb10c2](https://github.com/gnanamoorthy-parameshwaran/react-native-utils/commit/aeb10c20fed5ab4907f72449e4cffc5e44d3be02))
+* **createAPI:** share unchanged parts of query results between fetches ([99da70c](https://github.com/gnanamoorthy-parameshwaran/react-native-utils/commit/99da70cba673ec608b4c2003b26f03fcdcfb743e))
+* **skills:** ship an AI agent skill installable with add-skill ([af69ea3](https://github.com/gnanamoorthy-parameshwaran/react-native-utils/commit/af69ea3cf9da59646e2e42bb390febdabe6e0702))
+
+
+### BREAKING CHANGES
+
+* createAPI returns an object instead of the useAPI hook.
+useAPI no longer accepts cacheConfig or returns invalidateCache /
+invalidateCacheGroup; getCacheKey, the `cache` option and the cache drivers
+(MemoryCacheDriver, AsyncStorageCacheDriver, TaggedCacheDriver) are removed.
+* regenerated clients no longer return invalidate helpers or
+cache GET responses.
+
 # [1.4.0](https://github.com/gnanamoorthy-parameshwaran/react-native-utils/compare/v1.3.0...v1.4.0) (2026-09-02)
 
 

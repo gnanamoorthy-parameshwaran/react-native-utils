@@ -525,3 +525,111 @@ describe('useQuery revalidation on app foreground and network reconnect', () => 
         expect(network.listeners.size).toBe(0);
     });
 });
+
+describe('useInfiniteQuery', () => {
+    type Page = {items: number[]; next?: number};
+
+    /** A fake three-page server: page n holds [n*10, n*10+1]; the last page has no `next`. */
+    function pagedServer() {
+        const queryFn = jest.fn(async ({pageParam}: {pageParam: number}): Promise<Page> => ({
+            items: [pageParam * 10, pageParam * 10 + 1],
+            next: pageParam < 3 ? pageParam + 1 : undefined,
+        }));
+        const options = {queryFn, initialPageParam: 1, getNextPageParam: (lastPage: Page) => lastPage.next};
+        return {queryFn, options};
+    }
+
+    const items = (data?: {pages: Page[]}) => data?.pages.flatMap(page => page.items);
+
+    it('loads the first page, then appends pages until there is no next page', async () => {
+        const {useInfiniteQuery} = createAPI({baseURL: 'https://example.test'});
+        const {queryFn, options} = pagedServer();
+
+        const {result} = renderHook(() => useInfiniteQuery({queryKey: ['feed'], ...options}));
+        expect(result.current.isLoading).toBe(true);
+        await waitFor(() => expect(items(result.current.data)).toEqual([10, 11]));
+        expect(result.current.hasNextPage).toBe(true);
+
+        await act(() => result.current.fetchNextPage());
+        await act(() => result.current.fetchNextPage());
+        expect(items(result.current.data)).toEqual([10, 11, 20, 21, 30, 31]);
+        expect(result.current.data?.pageParams).toEqual([1, 2, 3]);
+        expect(result.current.hasNextPage).toBe(false);
+
+        await act(() => result.current.fetchNextPage());
+        expect(queryFn).toHaveBeenCalledTimes(3);
+    });
+
+    it('flags isFetchingNextPage during a next-page fetch and ignores fetchNextPage while one is running', async () => {
+        const {useInfiniteQuery} = createAPI({baseURL: 'https://example.test'});
+        let resolvePage: (page: Page) => void = () => {};
+        const queryFn = jest
+            .fn()
+            .mockResolvedValueOnce({items: [10], next: 2})
+            .mockImplementationOnce(() => new Promise<Page>(resolve => (resolvePage = resolve)));
+
+        const {result} = renderHook(() =>
+            useInfiniteQuery<Page, number>({queryKey: ['slow-feed'], queryFn, initialPageParam: 1, getNextPageParam: last => last.next}),
+        );
+        await waitFor(() => expect(result.current.data).toBeDefined());
+        expect(result.current.isFetchingNextPage).toBe(false);
+
+        act(() => {
+            result.current.fetchNextPage();
+            result.current.fetchNextPage();
+        });
+        expect(result.current).toMatchObject({isFetchingNextPage: true, isFetching: true, isLoading: false});
+        expect(queryFn).toHaveBeenCalledTimes(2);
+
+        await act(async () => resolvePage({items: [20]}));
+        expect(result.current).toMatchObject({isFetchingNextPage: false, isFetching: false, hasNextPage: false});
+        expect(items(result.current.data)).toEqual([10, 20]);
+    });
+
+    it('reloads only the first page on refetch and on invalidation', async () => {
+        const {useInfiniteQuery, invalidateQueries} = createAPI({baseURL: 'https://example.test', staleTime: 60_000});
+        const {queryFn, options} = pagedServer();
+
+        const {result} = renderHook(() => useInfiniteQuery({queryKey: ['posts', 'infinite'], ...options}));
+        await waitFor(() => expect(result.current.data).toBeDefined());
+        await act(() => result.current.fetchNextPage());
+        expect(result.current.data?.pages).toHaveLength(2);
+
+        await act(() => result.current.refetch());
+        expect(result.current.data?.pages).toHaveLength(1);
+        expect(queryFn).toHaveBeenLastCalledWith(expect.objectContaining({pageParam: 1}));
+
+        await act(() => result.current.fetchNextPage());
+        await act(() => invalidateQueries(['posts']));
+        expect(result.current.data?.pageParams).toEqual([1]);
+        expect(queryFn).toHaveBeenCalledTimes(5);
+    });
+
+    it('shows the cached pages instantly on remount and revalidates them in the background', async () => {
+        const {useInfiniteQuery} = createAPI({baseURL: 'https://example.test'});
+        const {queryFn, options} = pagedServer();
+
+        const first = renderHook(() => useInfiniteQuery({queryKey: ['cached-feed'], ...options}));
+        await waitFor(() => expect(first.result.current.data).toBeDefined());
+        await act(() => first.result.current.fetchNextPage());
+        first.unmount();
+
+        const second = renderHook(() => useInfiniteQuery({queryKey: ['cached-feed'], ...options}));
+        expect(second.result.current).toMatchObject({isLoading: false, isFetching: true});
+        expect(items(second.result.current.data)).toEqual([10, 11, 20, 21]);
+        await waitFor(() => expect(second.result.current.isFetching).toBe(false));
+        expect(items(second.result.current.data)).toEqual([10, 11]);
+        expect(queryFn).toHaveBeenCalledTimes(3);
+    });
+
+    it('makes one request for two components on the same list', async () => {
+        const {useInfiniteQuery} = createAPI({baseURL: 'https://example.test'});
+        const {queryFn, options} = pagedServer();
+
+        const a = renderHook(() => useInfiniteQuery({queryKey: ['shared-feed'], ...options}));
+        const b = renderHook(() => useInfiniteQuery({queryKey: ['shared-feed'], ...options}));
+        await waitFor(() => expect(a.result.current.data).toBeDefined());
+        await waitFor(() => expect(b.result.current.data).toBeDefined());
+        expect(queryFn).toHaveBeenCalledTimes(1);
+    });
+});

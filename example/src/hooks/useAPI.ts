@@ -1,6 +1,6 @@
 import {createAPI} from '@gnanamoorthy/react-native-utils';
 
-const {useAPI, useQuery, invalidateQueries} = createAPI({
+const {useAPI, useQuery, useInfiniteQuery, invalidateQueries} = createAPI({
     baseURL: 'https://jsonplaceholder.typicode.com',
     staleTime: 60_000,
     onBeforeRequest: async props => {
@@ -13,5 +13,5 @@ const {useAPI, useQuery, invalidateQueries} = createAPI({
     },
 });
 
-export {useQuery, invalidateQueries};
+export {useQuery, useInfiniteQuery, invalidateQueries};
 export default useAPI;

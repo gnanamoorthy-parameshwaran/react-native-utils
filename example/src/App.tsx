@@ -2,9 +2,11 @@ import React from 'react';
 import {ActivityIndicator, FlatList, Pressable, SafeAreaView, StyleSheet, Text, View} from 'react-native';
 
 import {invalidateQueries} from './hooks/useAPI';
-import {usePostsQuery, type Post} from './hooks/usePosts';
+import {usePostsInfiniteQuery, usePostsQuery, type Post} from './hooks/usePosts';
 
 export default function App() {
+    const [mode, setMode] = React.useState<'paged' | 'infinite'>('paged');
+
     return (
         <SafeAreaView style={styles.container}>
             <View>
@@ -12,7 +14,12 @@ export default function App() {
                 <Text style={styles.subtitle}>useQuery caching demo</Text>
             </View>
 
-            <PagedPosts />
+            <View style={styles.row}>
+                <Button title="Paged" disabled={mode === 'paged'} onPress={() => setMode('paged')} />
+                <Button title="Infinite" disabled={mode === 'infinite'} onPress={() => setMode('infinite')} />
+            </View>
+
+            {mode === 'paged' ? <PagedPosts /> : <InfinitePosts />}
 
             <Button title="Invalidate posts" onPress={() => invalidateQueries(['posts'])} />
         </SafeAreaView>
@@ -44,6 +51,33 @@ function PagedPosts() {
                 data={data}
                 keyExtractor={item => String(item.id)}
                 renderItem={({item}) => <PostRow post={item} />}
+            />
+        </View>
+    );
+}
+
+/**
+ * One cached list that grows as it scrolls. Pull to refresh (or invalidation)
+ * reloads only the first page.
+ */
+function InfinitePosts() {
+    const {data, error, isLoading, isFetching, isFetchingNextPage, hasNextPage, fetchNextPage, refetch} = usePostsInfiniteQuery();
+
+    if (isLoading) return <ActivityIndicator />;
+
+    return (
+        <View style={styles.fill}>
+            {error ? <Text>{String(error)}</Text> : null}
+            <FlatList
+                style={styles.fill}
+                data={data?.pages.flat()}
+                keyExtractor={item => String(item.id)}
+                renderItem={({item}) => <PostRow post={item} />}
+                onEndReached={() => fetchNextPage()}
+                onEndReachedThreshold={0.5}
+                refreshing={isFetching && !isFetchingNextPage}
+                onRefresh={refetch}
+                ListFooterComponent={isFetchingNextPage ? <ActivityIndicator /> : !hasNextPage ? <Text>No more posts</Text> : null}
             />
         </View>
     );

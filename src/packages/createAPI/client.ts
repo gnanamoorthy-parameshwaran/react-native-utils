@@ -5,16 +5,21 @@ import APIContext from './context/APIContext';
 import {hashKey, matchKey, noFocusEffect, parseResponseBody, replaceEqualDeep, validateAndThrowExceptions} from './util';
 
 import type {
+    CachedQueryResult,
     CacheEntry,
     CreateAPIProps,
     EmitEvent,
+    FetchMode,
     FetchProps,
+    InfiniteData,
     MountedQuery,
     QueryFunctionContext,
     QueryKey,
     QueryState,
     RequestBody,
     Retry,
+    UseInfiniteQueryOptions,
+    UseInfiniteQueryResult,
     UseQueryOptions,
     UseQueryResult,
 } from './types';
@@ -236,14 +241,14 @@ export default function createAPI({
         onQueryError,
     }: {
         queryKey: QueryKey;
-        fetcher: (context: QueryFunctionContext) => Promise<T>;
+        fetcher: (context: QueryFunctionContext & {mode: FetchMode; current: T | undefined}) => Promise<T>;
         staleTime: number;
         cacheTime: number;
         enabled: boolean;
         keepPreviousData: boolean;
         onSuccess?: (data: T) => void;
         onQueryError?: (error: unknown) => void;
-    }): UseQueryResult<T> {
+    }): CachedQueryResult<T> {
         const {emitEvent} = React.useContext(APIContext);
         const hash = hashKey(queryKey);
 
@@ -259,9 +264,9 @@ export default function createAPI({
             const isFetching = enabled && (cached === undefined || cached.isStale);
 
             if (data === undefined && keepPreviousData && previous?.data !== undefined) {
-                return {hash, data: previous.data, error: null, isFetching, isPlaceholderData: true};
+                return {hash, data: previous.data, error: null, isFetching, isFetchingNextPage: false, isPlaceholderData: true};
             }
-            return {hash, data, error: null, isFetching, isPlaceholderData: false};
+            return {hash, data, error: null, isFetching, isFetchingNextPage: false, isPlaceholderData: false};
         };
 
         const [state, setState] = React.useState<QueryState<T>>(() => stateForKey());
@@ -284,32 +289,40 @@ export default function createAPI({
         const lastFetch = React.useRef(0);
 
         /**
-         * Serves a fresh cache entry unless `force`. Stale data is shown right
-         * away while `queryFn` revalidates it in the background; with nothing
-         * cached, it simply fetches. A response is ignored by this component if
-         * it unmounted, its key changed, or a newer fetch started meanwhile.
+         * Runs one fetch for the current key:
+         * - `revalidate` serves a fresh cache entry; stale data is shown right away
+         *   while it revalidates in the background; with nothing cached, it fetches.
+         * - `refetch` always fetches.
+         * - `next` appends the next page (infinite lists). It is skipped while any
+         *   request for the key is running or nothing is loaded yet.
+         * A response is ignored by this component if it unmounted, its key
+         * changed, or a newer fetch started meanwhile.
          */
         const fetchData = React.useCallback(
-            async (force: boolean) => {
+            async (fetchType: 'revalidate' | 'refetch' | FetchMode) => {
+                if (fetchType === 'next' && (inflight.has(hash) || currentData.current === undefined)) return;
+
                 const fetchId = ++lastFetch.current;
                 const isStale = () => !isActive.current || currentHash.current !== hash || lastFetch.current !== fetchId;
 
-                if (!force) {
+                if (fetchType === 'revalidate') {
                     const cached = readCache<T>(hash);
                     if (cached) {
                         const data = replaceEqualDeep(currentData.current, cached.data);
-                        setState({hash, data, error: null, isFetching: cached.isStale, isPlaceholderData: false});
+                        setState({hash, data, error: null, isFetching: cached.isStale, isFetchingNextPage: false, isPlaceholderData: false});
                         if (!cached.isStale) return;
                     }
                 }
 
+                const mode: FetchMode = fetchType === 'next' ? 'next' : 'refresh';
                 const {queryKey: key, fetcher: fn, onSuccess: success, onQueryError: failure, emitEvent: emit} = latest.current;
                 const times = {staleTime: latest.current.staleTime, cacheTime: latest.current.cacheTime};
-                setState(previous => ({...previous, isFetching: true}));
+                const current = currentData.current;
+                setState(previous => ({...previous, isFetching: true, isFetchingNextPage: mode === 'next'}));
 
                 let running = inflight.get(hash);
                 if (!running) {
-                    const promise = fn({request: options => send(options, emit)})
+                    const promise = fn({request: options => send(options, emit), mode, current})
                         .then(data => {
                             if (inflight.get(hash)?.promise !== promise) return data;
 
@@ -329,12 +342,12 @@ export default function createAPI({
                     if (isStale()) return;
 
                     const data = replaceEqualDeep(currentData.current, result);
-                    setState({hash, data, error: null, isFetching: false, isPlaceholderData: false});
+                    setState({hash, data, error: null, isFetching: false, isFetchingNextPage: false, isPlaceholderData: false});
                     success?.(data);
                 } catch (error) {
                     if (isStale()) return;
 
-                    setState(previous => ({...previous, error, isFetching: false}));
+                    setState(previous => ({...previous, error, isFetching: false, isFetchingNextPage: false}));
                     failure?.(error);
                 }
             },
@@ -349,7 +362,7 @@ export default function createAPI({
         }, []);
 
         React.useEffect(() => {
-            if (enabled) fetchData(false);
+            if (enabled) fetchData('revalidate');
         }, [fetchData, enabled]);
 
         /**
@@ -359,7 +372,7 @@ export default function createAPI({
          */
         const onFocus = React.useCallback(() => {
             isFocused.current = true;
-            if (latest.current.enabled) fetchData(false);
+            if (latest.current.enabled) fetchData('revalidate');
             return () => {
                 isFocused.current = false;
             };
@@ -371,22 +384,25 @@ export default function createAPI({
                 queryKey: latest.current.queryKey,
                 isEnabled: () => latest.current.enabled,
                 isFocused: () => isFocused.current,
-                refetch: () => fetchData(true),
-                revalidate: () => fetchData(false),
+                refetch: () => fetchData('refetch'),
+                revalidate: () => fetchData('revalidate'),
             };
             addMounted(entry);
             return () => removeMounted(entry);
         }, [fetchData]);
 
-        const refetch = React.useCallback(() => fetchData(true), [fetchData]);
+        const refetch = React.useCallback(() => fetchData('refetch'), [fetchData]);
+        const fetchNext = React.useCallback(() => fetchData('next'), [fetchData]);
 
         return {
             data: state.data,
             error: state.error,
             isLoading: state.isFetching && state.data === undefined,
             isFetching: state.isFetching,
+            isFetchingNextPage: state.isFetchingNextPage,
             isPlaceholderData: state.isPlaceholderData,
             refetch,
+            fetchNext,
         };
     }
 
@@ -400,7 +416,68 @@ export default function createAPI({
         onSuccess,
         onError: onQueryError,
     }: UseQueryOptions<T>): UseQueryResult<T> {
-        return useCachedQuery({queryKey, fetcher: queryFn, staleTime, cacheTime, enabled, keepPreviousData, onSuccess, onQueryError});
+        const {data, error, isLoading, isFetching, isPlaceholderData, refetch} = useCachedQuery({
+            queryKey,
+            fetcher: ({request}) => queryFn({request}),
+            staleTime,
+            cacheTime,
+            enabled,
+            keepPreviousData,
+            onSuccess,
+            onQueryError,
+        });
+        return {data, error, isLoading, isFetching, isPlaceholderData, refetch};
+    }
+
+    /**
+     * A list loaded page by page (e.g. a FlatList with `onEndReached`), cached as
+     * one entry `{pages, pageParams}` under its key, so stale time, cache time,
+     * invalidation and deduplication apply to the whole list. A refresh of any
+     * kind (revalidation, invalidation, `refetch()`) reloads only the first page.
+     */
+    function useInfiniteQuery<TPage, TPageParam>({
+        queryKey,
+        queryFn,
+        initialPageParam,
+        getNextPageParam,
+        staleTime = defaultStaleTime,
+        cacheTime = defaultCacheTime,
+        enabled = true,
+        onSuccess,
+        onError: onQueryError,
+    }: UseInfiniteQueryOptions<TPage, TPageParam>): UseInfiniteQueryResult<TPage, TPageParam> {
+        const nextPageParam = (data: InfiniteData<TPage, TPageParam> | undefined): TPageParam | undefined => {
+            const last = data ? data.pages.length - 1 : -1;
+            if (!data || last < 0) return undefined;
+            return getNextPageParam(data.pages[last] as TPage, data.pages, data.pageParams[last] as TPageParam);
+        };
+
+        const {data, error, isLoading, isFetching, isFetchingNextPage, refetch, fetchNext} = useCachedQuery<InfiniteData<TPage, TPageParam>>({
+            queryKey,
+            fetcher: async ({request, mode, current}) => {
+                if (mode === 'next' && current) {
+                    const pageParam = nextPageParam(current);
+                    if (pageParam === undefined) return current;
+
+                    const page = await queryFn({request, pageParam});
+                    return {pages: [...current.pages, page], pageParams: [...current.pageParams, pageParam]};
+                }
+
+                const firstPage = await queryFn({request, pageParam: initialPageParam});
+                return {pages: [firstPage], pageParams: [initialPageParam]};
+            },
+            staleTime,
+            cacheTime,
+            enabled,
+            keepPreviousData: false,
+            onSuccess,
+            onQueryError,
+        });
+
+        const hasNextPage = nextPageParam(data) !== undefined;
+        const fetchNextPage = React.useCallback(() => (hasNextPage ? fetchNext() : Promise.resolve()), [hasNextPage, fetchNext]);
+
+        return {data, error, isLoading, isFetching, isFetchingNextPage, hasNextPage, fetchNextPage, refetch};
     }
 
     /**
@@ -424,5 +501,5 @@ export default function createAPI({
         await Promise.all(visible.map(query => query.refetch()));
     }
 
-    return {useAPI, useQuery, invalidateQueries};
+    return {useAPI, useQuery, useInfiniteQuery, invalidateQueries};
 }

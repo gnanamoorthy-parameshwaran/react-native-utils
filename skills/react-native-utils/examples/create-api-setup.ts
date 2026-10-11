@@ -14,7 +14,7 @@ declare function reportError(error: unknown, url: string): void;
 /** Stands in for `import NetInfo from '@react-native-community/netinfo'`. */
 declare const NetInfo: {addEventListener: (listener: (state: {isConnected: boolean | null}) => void) => () => void};
 
-const {useAPI, useQuery, invalidateQueries} = createAPI({
+const {useAPI, useQuery, useInfiniteQuery, invalidateQueries} = createAPI({
     baseURL: 'https://api.example.com',
     throwException: true,
     maxRetries: 1,
@@ -41,5 +41,5 @@ const {useAPI, useQuery, invalidateQueries} = createAPI({
     onError: ({error, url}) => reportError(error, url),
 });
 
-export {useQuery, invalidateQueries};
+export {useQuery, useInfiniteQuery, invalidateQueries};
 export default useAPI;

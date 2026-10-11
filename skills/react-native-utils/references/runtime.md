@@ -8,6 +8,7 @@ Source, if behaviour needs checking: `node_modules/@gnanamoorthy/react-native-ut
 - Setup
 - `useAPI`
 - `useQuery`
+- `useInfiniteQuery`
 - `invalidateQueries`
 - Behaviour (for debugging)
 - Not implemented yet
@@ -77,6 +78,34 @@ const {data, error, isLoading, isFetching, isPlaceholderData, refetch} = useQuer
 
 Paged screen example: [../examples/paged-query.tsx](../examples/paged-query.tsx).
 
+## `useInfiniteQuery`
+
+For lists that load page by page as they scroll. Full example:
+[../examples/infinite-list.tsx](../examples/infinite-list.tsx).
+
+```ts
+const {data, isLoading, isFetching, isFetchingNextPage, hasNextPage, fetchNextPage, refetch} = useInfiniteQuery({
+    queryKey: ['posts', 'infinite'],
+    queryFn: ({request, pageParam}) => request<Page>({endpoint: `/posts?page=${pageParam}`}),
+    initialPageParam: 1,
+    getNextPageParam: (lastPage, allPages, lastPageParam) => (lastPage.meta.current_page < lastPage.meta.last_page ? lastPageParam + 1 : undefined),
+});
+// data: {pages: Page[], pageParams: number[]}; render data?.pages.flatMap(page => page.data)
+```
+
+- Takes the same `staleTime`, `cacheTime`, `enabled`, `onSuccess` and `onError` options as `useQuery`
+  (no `keepPreviousData`).
+- The whole list is **one cache entry** under its key, so stale time, cache time, invalidation,
+  deduplication and structural sharing apply to the list as a whole.
+- `fetchNextPage()` appends the page `getNextPageParam` points to. It does nothing when
+  `hasNextPage` is false or any request for the list is running, so it is safe to call from
+  `onEndReached`.
+- `isFetchingNextPage` is true only while a next page loads; use `isFetching && !isFetchingNextPage`
+  for a pull-to-refresh indicator.
+- Any refresh (stale revalidation on mount, focus, foreground or reconnect; `invalidateQueries`;
+  `refetch()`) reloads **only the first page**, replacing the list. There is no page limit and
+  loading is forward only.
+
 ## `invalidateQueries`
 
 ```ts
@@ -121,6 +150,5 @@ matching queries that are mounted, enabled and focused refetch.
 
 ## Not implemented yet
 
-- Infinite queries (append-as-you-scroll lists).
 - Persistence across app restarts.
 - Prefetching a key without mounting a `useQuery`.

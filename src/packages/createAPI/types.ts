@@ -107,4 +107,37 @@ export type MountedQuery = {
 };
 
 /** One `useQuery` instance's state for the key it currently shows. */
-export type QueryState<T> = {hash: string; data: T | undefined; error: unknown; isFetching: boolean; isPlaceholderData: boolean};
+export type QueryState<T> = {
+    hash: string;
+    data: T | undefined;
+    error: unknown;
+    isFetching: boolean;
+    isFetchingNextPage: boolean;
+    isPlaceholderData: boolean;
+};
+
+/** What one fetch is for: reloading the data, or appending the next page of an infinite list. */
+export type FetchMode = 'refresh' | 'next';
+
+/** What the shared query engine returns; each public hook picks the fields it exposes. */
+export type CachedQueryResult<T> = UseQueryResult<T> & {isFetchingNextPage: boolean; fetchNext: () => Promise<void>};
+
+/** An infinite list's data: the pages loaded so far, and the param each page was fetched with. */
+export type InfiniteData<TPage, TPageParam> = {pages: TPage[]; pageParams: TPageParam[]};
+
+export type UseInfiniteQueryOptions<TPage, TPageParam> = Omit<UseQueryOptions<InfiniteData<TPage, TPageParam>>, 'queryFn' | 'keepPreviousData'> & {
+    /** Fetches one page; `pageParam` is `initialPageParam` for the first page, then what `getNextPageParam` returned. */
+    queryFn: (context: QueryFunctionContext & {pageParam: TPageParam}) => Promise<TPage>;
+    initialPageParam: TPageParam;
+    /** Returns the param for the page after `lastPage`, or `undefined` when there are no more pages. */
+    getNextPageParam: (lastPage: TPage, allPages: TPage[], lastPageParam: TPageParam) => TPageParam | undefined;
+};
+
+export type UseInfiniteQueryResult<TPage, TPageParam> = Omit<UseQueryResult<InfiniteData<TPage, TPageParam>>, 'isPlaceholderData'> & {
+    /** True when `getNextPageParam` returns a param for another page. */
+    hasNextPage: boolean;
+    /** True while the next page is loading (`isFetching` is also true). */
+    isFetchingNextPage: boolean;
+    /** Loads and appends the next page; does nothing without a next page or while a request is running. */
+    fetchNextPage: () => Promise<void>;
+};

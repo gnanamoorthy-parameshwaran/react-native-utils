@@ -21,7 +21,8 @@ import {createAPI} from '@gnanamoorthy/react-native-utils';
 
 const {useAPI, useQuery, invalidateQueries} = createAPI({
     baseURL: 'https://api.example.com',
-    queryTtl: 60_000, // default cache lifetime for queries (ms); 0 = no caching
+    staleTime: 60_000, // optional: how long data is fresh (ms); default 0 = revalidate on every mount
+    cacheTime: 5 * 60_000, // optional: how long unused data stays in memory (ms); this is the default
 });
 
 export {useQuery, invalidateQueries};
@@ -29,7 +30,8 @@ export default useAPI;
 ```
 
 ```tsx
-// Cached for `ttl` ms per query key; a remount within the ttl renders from cache
+// Fresh for `staleTime`: a remount renders from cache with no request. After that, cached data is still
+// shown instantly while it revalidates in the background (isFetching), until `cacheTime` drops it.
 const {data, error, isLoading, refetch} = useQuery({
     queryKey: ['posts', {id}],
     queryFn: ({request}) => request<Post>({endpoint: `/posts/${id}`}),
@@ -55,13 +57,13 @@ invalidateQueries(['posts']);       // every cached post; mounted ones refetch
 Components on the same key share one in-flight request. The query cache is in memory only.
 
 To fetch again when a screen regains focus, pass your navigation library's focus hook once. Screens
-don't import it. A query fetches on focus only if its cache has expired, and `invalidateQueries`
+don't import it. A query revalidates on focus only if its data is stale, and `invalidateQueries`
 refetches only the focused screen; background screens fetch when you return to them:
 
 ```ts
 import {useFocusEffect} from '@react-navigation/native';
 
-createAPI({baseURL: 'https://api.example.com', queryTtl: 60_000, useFocusEffect});
+createAPI({baseURL: 'https://api.example.com', staleTime: 60_000, useFocusEffect});
 ```
 Infinite queries (append-as-you-scroll lists) are not implemented yet.
 
@@ -92,7 +94,7 @@ upgrading the package to keep the instructions in step with the installed versio
   itself.
 - `useAPI()` returns `{loading, request}`. `cacheConfig`, `invalidateCache` and
   `invalidateCacheGroup` are gone:
-    - `request({..., cacheConfig: {ttl}})` becomes `useQuery({queryKey, queryFn, ttl})`.
+    - `request({..., cacheConfig: {ttl}})` becomes `useQuery({queryKey, queryFn, staleTime})`.
     - `invalidateCache(key)` / `invalidateCacheGroup(tag)` become `invalidateQueries(queryKey)`,
       which clears every query whose key starts with it.
 - `getCacheKey`, the `cache` option and the cache drivers (`MemoryCacheDriver`,

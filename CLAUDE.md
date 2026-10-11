@@ -9,7 +9,7 @@ and update this file when a decision changes.
   function or non-obvious section explaining the *why*. Don't add a `//` comment on every line; leave
   self-explanatory code uncommented.
 - **Object parameters.** A function with two or more parameters takes one destructured object
-  (`writeCache({hash, queryKey, data, ttl})`), not positional arguments. One parameter can stay positional.
+  (`writeCache({hash, queryKey, data, staleTime, cacheTime})`), not positional arguments. One parameter can stay positional.
 - **generateAPI follows a Laravel-style layout:** one small class per concern in `parsers/`,
   `resolvers/`, `generators/`, `support/`, `contracts/`, `types/`. A new output framework is one driver
   class plus one case in `GeneratorManager`.
@@ -29,7 +29,7 @@ and update this file when a decision changes.
 
 - **`useAPI`** is the request layer and always exists: base URL, headers, auth, retry, typed errors and
   error reporting, configured once in `createAPI`. It returns `{loading, request}` and never caches.
-- **`useQuery`** is a page-level composable. Each screen picks its own `queryKey` and `ttl`.
+- **`useQuery`** is a page-level composable. Each screen picks its own `queryKey`, `staleTime` and `cacheTime`.
 - **`generateAPI`** emits typed API clients only (`use{Resource}()` hooks on top of `useAPI`). It never
   emits query hooks, cache options or invalidate helpers; an `x-cache-config` spec extension is ignored.
   Caching a generated method is done on the screen by calling it inside `useQuery`.
@@ -39,14 +39,14 @@ and update this file when a decision changes.
 
 | Topic | Decision |
 |---|---|
-| Cache structure | Flat `Map<hashKey(queryKey), {queryKey, data, expiresAt}>`, not a nested tree. |
-| Freshness | Simple TTL: data is served from cache until it expires, then the next mount or focus fetches. No stale-while-revalidate. |
-| Invalidation | `invalidateQueries(queryKey)` matches by key prefix, with partial matching on object segments. No tags. |
+| Cache structure | Flat `Map<hashKey(queryKey), {queryKey, data, staleAt, expiresAt}>`, not a nested tree. |
+| Freshness | Stale-while-revalidate: data is fresh for `staleTime` (default 0), then shown while it revalidates in the background until `cacheTime` (default 5 min) drops it. Replaced the earlier simple `ttl` (2026-10-11). |
+| Invalidation | `invalidateQueries(queryKey)` matches by key prefix, with partial matching on object segments, and marks entries stale rather than deleting them. No tags. |
 | Deduplication | Same-key fetches share one in-flight request. Invalidation drops matching in-flight requests so a refetch never reuses a request from before it. |
 | Persistence | In memory only. Cache drivers (Memory, AsyncStorage, Tagged) were removed; a persistence driver may come later. |
-| Screen focus | Navigation hooks are injected: `createAPI({useFocusEffect})`. The library never imports a navigation package. On focus a query fetches only if expired; invalidation refetches only focused queries, and background screens fetch when they regain focus. |
+| Screen focus | Navigation hooks are injected: `createAPI({useFocusEffect})`. The library never imports a navigation package. On focus a query revalidates only if stale; invalidation refetches only focused queries, and background screens fetch when they regain focus. |
 | Pagination | `keepPreviousData` keeps the previous key's data as placeholder. `isLoading` = nothing to show yet, `isFetching` = any request in flight, `isPlaceholderData` = showing the previous key's data. |
-| Memory | Every cache write first drops expired entries; results with `ttl` 0 are never stored. |
+| Memory | Every cache write first drops entries past `cacheTime`; with both times 0 nothing is stored. |
 | Structural sharing | Each result is merged into the data on screen (and into the existing cache entry) with `replaceEqualDeep`; unchanged parts keep their references. |
 
 ## generateAPI output
@@ -72,5 +72,5 @@ and update this file when a decision changes.
 
 - `useInfiniteQuery` (append-as-you-scroll lists), built on the same cache.
 - A persistence driver.
-- A cache size cap (LRU) if many keys are created within one TTL.
-- Separate stale time, refetch on reconnect, `setQueryData` / optimistic updates.
+- A cache size cap (LRU) if many keys are created within one `cacheTime`.
+- Revalidation on app foreground / network reconnect (injected like `useFocusEffect`), `setQueryData` / optimistic updates.

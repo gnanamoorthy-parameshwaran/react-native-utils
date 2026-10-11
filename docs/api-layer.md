@@ -6,13 +6,13 @@ Managing server data well means solving the problems below. This is where `useQu
 
 | Problem | Status | How |
 |---|---|---|
-| Caching | Covered | Results are cached in memory per `queryKey` for `ttl` milliseconds; a remount within the TTL renders instantly with no request. |
+| Caching | Covered | Results are cached in memory per `queryKey`. Within `staleTime` a remount renders instantly with no request; after that the cached data is still shown instantly while it revalidates. |
 | Deduping multiple requests for the same data into a single request | Covered | Components on the same key share one in-flight request. |
-| Updating "out of date" data in the background | Partial | `refetch()` and `invalidateQueries` keep the current data on screen (`isFetching`) while the new data loads. An entry whose TTL has expired is dropped, so the next mount or focus loads it again from blank instead of revalidating in the background. |
-| Knowing when data is "out of date" | Partial | A per-query `ttl`, explicit `invalidateQueries`, and a refetch on screen focus once expired (when `useFocusEffect` is passed to `createAPI`). There is no separate "stale" time before expiry and no refetch on network reconnect. |
+| Updating "out of date" data in the background | Covered | Stale data stays on screen (`isFetching: true`) while a background request replaces it: on remount, on screen focus, after `invalidateQueries` and on `refetch()`. Data is only dropped after `cacheTime`, when the next mount starts blank. |
+| Knowing when data is "out of date" | Partial | Data is fresh for `staleTime`, then stale; `invalidateQueries` marks matching data stale immediately; a screen regaining focus revalidates stale data (when `useFocusEffect` is passed to `createAPI`). There is no automatic revalidation when the app returns to the foreground or the network reconnects. |
 | Reflecting updates to data as quickly as possible | Partial | `invalidateQueries` refetches every visible query with a matching key at once. A single component's `refetch()` doesn't update other components showing the same key, and the cache can't be written directly (no `setQueryData` or optimistic updates). |
 | Performance optimizations like pagination and lazy loading data | Partial | Page-number pagination with `keepPreviousData`, and lazy loading with `enabled`. Append-as-you-scroll lists (`useInfiniteQuery`) are not available yet. |
-| Managing memory and garbage collection of server state | Covered | Every cache write first drops all expired entries, and results with no `ttl` are never stored, so memory holds only data fetched within its TTL. There is no separate cache-size cap or post-unmount grace period (`gcTime`). |
+| Managing memory and garbage collection of server state | Covered | Data is kept for `cacheTime` (5 minutes by default) and every cache write first drops entries past it; results with both times at 0 are never stored. There is no separate cache-size cap. |
 | Memoizing query results with structural sharing | Covered | Each new result is merged into the data already on screen: unchanged parts keep their previous object references, and a fully unchanged result keeps the same `data` reference. Memoized rows, `useMemo` and effects that depend on unchanged items skip work after a refetch. |
 
 Most screens in our apps talk to the backend in the same way: a raw `fetch` call, a `useState` for
@@ -102,7 +102,7 @@ Problems it solves:
 const {data, isLoading, isFetching, error, refetch} = useQuery({
     queryKey: ['posts', {page}],
     queryFn: ({request}) => request<Post[]>({endpoint: `/posts?page=${page}`}),
-    ttl: 60_000,
+    staleTime: 60_000,
     keepPreviousData: true,
 });
 
@@ -113,20 +113,23 @@ invalidateQueries(['posts']);
 Problems it solves:
 
 - **Every visit to a screen refetches the same data.** Without a cache, navigating back to a list
-  shows a spinner and repeats a request whose answer hasn't changed. `useQuery` stores each result
-  for `ttl` milliseconds; returning within that time renders instantly with no request. That means
-  faster screens, less mobile data and battery, and less load on the backend.
+  shows a spinner and repeats a request whose answer hasn't changed. `useQuery` stores each result:
+  within `staleTime`, returning renders instantly with no request; after that, the cached data still
+  renders instantly while a background request refreshes it, so the user never waits on a blank
+  screen for data they've already seen. That means faster screens, less mobile data and battery,
+  and less load on the backend.
 - **The same data requested twice at once.** When a header and a list on one screen both need the
   same data, raw `fetch` sends two identical requests. Components using the same `queryKey` share
   one request.
 - **Screens showing stale data after an update.** After a post is edited, every screen showing
   posts has to be told to reload, which usually means passing callbacks or refresh flags between
-  screens. `invalidateQueries(['posts'])` clears every cached entry whose key starts with
-  `['posts']` (every page, every filter, every single post) and refetches the ones on screen.
+  screens. `invalidateQueries(['posts'])` marks every cached entry whose key starts with
+  `['posts']` (every page, every filter, every single post) as stale and refetches the ones on
+  screen; the others show their old data and refresh when next opened.
 - **Background screens refetching for nobody.** When the app's `useFocusEffect` is passed to
   `createAPI`, invalidation refetches only the screen in view. Screens further back in the
   navigation stack load fresh data when the user returns to them, and a screen regaining focus
-  refetches if its cache has expired.
+  revalidates if its data is stale.
 - **Out-of-order responses.** If the user changes page or filter quickly, an older response can
   arrive after a newer one and overwrite it. `useQuery` ignores a response that no longer matches
   the key on screen.
@@ -177,7 +180,7 @@ Problems it solves:
   project's formatter on the output.
 
 Generated clients are plain API clients built on `useAPI`. Caching stays a screen-level decision:
-a screen wraps a generated method in `useQuery` with the key and TTL it needs.
+a screen wraps a generated method in `useQuery` with the key and stale time it needs.
 
 ```ts
 const {getInvoices} = useInvoice({businessUnit});

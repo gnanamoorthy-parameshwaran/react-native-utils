@@ -9,7 +9,7 @@ implementation.
 ## 1. Background
 
 - The package already ships `createAPI` (`src/packages/createAPI`): a factory,
-  `createAPI({ baseURL, queryTtl, throwException, onBeforeRequest, onAfterResponse, onError, maxRetries })`,
+  `createAPI({ baseURL, staleTime, cacheTime, throwException, onBeforeRequest, onAfterResponse, onError, maxRetries })`,
   returning `{ useAPI, useQuery, invalidateQueries }`. `useAPI()` exposes exactly
   `{ loading, request }`: one generic `request<T>(options)` and one `loading` flag per hook call,
   with no caching. `useAPI` is the axios-like layer where requests are managed in one place
@@ -127,7 +127,7 @@ implementation.
   const {data} = useQuery({
       queryKey: ['invoices', {businessUnit, page}],
       queryFn: () => getInvoices({params: {page}}),
-      ttl: 300_000,
+      staleTime: 300_000,
   });
   // later: invalidateQueries(['invoices']) clears every page
   ```
@@ -316,9 +316,9 @@ trailing id (e.g. `getInvoice({ invoice })`) would bind it on the method instead
 
 ### 3.7 Known scope limits
 
-- Query caching is simple TTL expiry in memory (same-key requests are shared): no background
-  revalidation, no refetch on reconnect (focus refetch needs `useFocusEffect` passed to `createAPI`), no infinite queries and no persistence
-  across app restarts.
+- Query caching is in memory with stale-while-revalidate (`staleTime` / `cacheTime`): no automatic
+  revalidation on app foreground or network reconnect (focus revalidation needs `useFocusEffect`
+  passed to `createAPI`), no infinite queries and no persistence across app restarts.
 - Only the React driver is implemented. The framework seam exists (`FrameworkGenerator` contract,
   framework-neutral `ParsedAPI` IR, `config.framework` selection), but a Vue driver hasn't been
   written yet — there is also no Vue equivalent of the `createAPI`/`useAPI` runtime to generate

@@ -1,5 +1,20 @@
 # Why createAPI, useAPI, useQuery and generateAPI
 
+## Server-state coverage at a glance
+
+Managing server data well means solving the problems below. This is where `useQuery` stands today.
+
+| Problem | Status | How |
+|---|---|---|
+| Caching | Covered | Results are cached in memory per `queryKey` for `ttl` milliseconds; a remount within the TTL renders instantly with no request. |
+| Deduping multiple requests for the same data into a single request | Covered | Components on the same key share one in-flight request. |
+| Updating "out of date" data in the background | Partial | `refetch()` and `invalidateQueries` keep the current data on screen (`isFetching`) while the new data loads. An entry whose TTL has expired is dropped, so the next mount or focus loads it again from blank instead of revalidating in the background. |
+| Knowing when data is "out of date" | Partial | A per-query `ttl`, explicit `invalidateQueries`, and a refetch on screen focus once expired (when `useFocusEffect` is passed to `createAPI`). There is no separate "stale" time before expiry and no refetch on network reconnect. |
+| Reflecting updates to data as quickly as possible | Partial | `invalidateQueries` refetches every visible query with a matching key at once. A single component's `refetch()` doesn't update other components showing the same key, and the cache can't be written directly (no `setQueryData` or optimistic updates). |
+| Performance optimizations like pagination and lazy loading data | Partial | Page-number pagination with `keepPreviousData`, and lazy loading with `enabled`. Append-as-you-scroll lists (`useInfiniteQuery`) are not available yet. |
+| Managing memory and garbage collection of server state | Not covered | Expired entries are removed only when their key is read again or invalidated; entries that are never revisited stay in memory until the app restarts. |
+| Memoizing query results with structural sharing | Not covered | Each fetch returns a new object, so components re-render with every result even if the data is unchanged. |
+
 Most screens in our apps talk to the backend in the same way: a raw `fetch` call, a `useState` for
 loading, a `try/catch`, and a manual check of `response.ok`. That works for one screen. Across a
 whole app it means the same code repeated in every component, small differences in how each one

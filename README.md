@@ -65,6 +65,20 @@ import {useFocusEffect} from '@react-navigation/native';
 
 createAPI({baseURL: 'https://api.example.com', staleTime: 60_000, useFocusEffect});
 ```
+
+Two more opt-in triggers revalidate the stale (or failed) queries on screen: the app returning to the
+foreground, and the network coming back. The network listener is passed in too, so the package never
+depends on a connectivity library:
+
+```ts
+import NetInfo from '@react-native-community/netinfo';
+
+createAPI({
+    baseURL: 'https://api.example.com',
+    revalidateOnAppForeground: true,
+    subscribeToNetwork: listener => NetInfo.addEventListener(state => listener(!!state.isConnected)),
+});
+```
 Infinite queries (append-as-you-scroll lists) are not implemented yet.
 
 ### Generating typed hooks from OpenAPI

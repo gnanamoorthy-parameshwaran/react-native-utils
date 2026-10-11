@@ -9,7 +9,7 @@ Managing server data well means solving the problems below. This is where `useQu
 | Caching | Covered | Results are cached in memory per `queryKey`. Within `staleTime` a remount renders instantly with no request; after that the cached data is still shown instantly while it revalidates. |
 | Deduping multiple requests for the same data into a single request | Covered | Components on the same key share one in-flight request. |
 | Updating "out of date" data in the background | Covered | Stale data stays on screen (`isFetching: true`) while a background request replaces it: on remount, on screen focus, after `invalidateQueries` and on `refetch()`. Data is only dropped after `cacheTime`, when the next mount starts blank. |
-| Knowing when data is "out of date" | Partial | Data is fresh for `staleTime`, then stale; `invalidateQueries` marks matching data stale immediately; a screen regaining focus revalidates stale data (when `useFocusEffect` is passed to `createAPI`). There is no automatic revalidation when the app returns to the foreground or the network reconnects. |
+| Knowing when data is "out of date" | Covered | Data is fresh for `staleTime`, then stale. `invalidateQueries` marks matching data stale immediately. Stale data on screen revalidates when its screen regains focus (`useFocusEffect`), when the app returns to the foreground (`revalidateOnAppForeground`) and when the network comes back (`subscribeToNetwork`); the last two are opt-in. |
 | Reflecting updates to data as quickly as possible | Partial | `invalidateQueries` refetches every visible query with a matching key at once. A single component's `refetch()` doesn't update other components showing the same key, and the cache can't be written directly (no `setQueryData` or optimistic updates). |
 | Performance optimizations like pagination and lazy loading data | Partial | Page-number pagination with `keepPreviousData`, and lazy loading with `enabled`. Append-as-you-scroll lists (`useInfiniteQuery`) are not available yet. |
 | Managing memory and garbage collection of server state | Covered | Data is kept for `cacheTime` (5 minutes by default) and every cache write first drops entries past it; results with both times at 0 are never stored. There is no separate cache-size cap. |
@@ -130,6 +130,10 @@ Problems it solves:
   `createAPI`, invalidation refetches only the screen in view. Screens further back in the
   navigation stack load fresh data when the user returns to them, and a screen regaining focus
   revalidates if its data is stale.
+- **Screens left out of date after the app was in the background or offline.** With
+  `revalidateOnAppForeground` and `subscribeToNetwork`, the queries on screen revalidate when the
+  app comes back to the foreground or the connection returns, and requests that failed while
+  offline are retried, without a pull-to-refresh.
 - **Out-of-order responses.** If the user changes page or filter quickly, an older response can
   arrive after a newer one and overwrite it. `useQuery` ignores a response that no longer matches
   the key on screen.

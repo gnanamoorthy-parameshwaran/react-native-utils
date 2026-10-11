@@ -45,6 +45,7 @@ and update this file when a decision changes.
 | Deduplication | Same-key fetches share one in-flight request. Invalidation drops matching in-flight requests so a refetch never reuses a request from before it. |
 | Persistence | In memory only. Cache drivers (Memory, AsyncStorage, Tagged) were removed; a persistence driver may come later. |
 | Screen focus | Navigation hooks are injected: `createAPI({useFocusEffect})`. The library never imports a navigation package. On focus a query revalidates only if stale; invalidation refetches only focused queries, and background screens fetch when they regain focus. |
+| App foreground / reconnect | Both opt-in. `revalidateOnAppForeground` uses React Native's own `AppState`; connectivity is injected with `subscribeToNetwork(listener => () => void)` so no network package is imported. On a background → active or offline → online transition, visible (mounted, enabled, focused) stale or failed queries revalidate. Listeners live while at least one query is mounted. |
 | Pagination | `keepPreviousData` keeps the previous key's data as placeholder. `isLoading` = nothing to show yet, `isFetching` = any request in flight, `isPlaceholderData` = showing the previous key's data. |
 | Memory | Every cache write first drops entries past `cacheTime`; with both times 0 nothing is stored. |
 | Structural sharing | Each result is merged into the data on screen (and into the existing cache entry) with `replaceEqualDeep`; unchanged parts keep their references. |
@@ -73,4 +74,4 @@ and update this file when a decision changes.
 - `useInfiniteQuery` (append-as-you-scroll lists), built on the same cache.
 - A persistence driver.
 - A cache size cap (LRU) if many keys are created within one `cacheTime`.
-- Revalidation on app foreground / network reconnect (injected like `useFocusEffect`), `setQueryData` / optimistic updates.
+- `setQueryData` / optimistic updates.

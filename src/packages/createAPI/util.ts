@@ -191,3 +191,31 @@ export function matchKey(queryKey: QueryKey, filter: QueryKey): boolean {
 
     return filter.every((segment, index) => partialDeepEqual(queryKey[index], segment));
 }
+
+/**
+ * Structural sharing: returns `next`, but with every part that deep-equals the
+ * matching part of `previous` replaced by the `previous` reference. If nothing
+ * changed, `previous` itself is returned. Unchanged list items keep their
+ * identity, so memoized rows and effects depending on them skip work after a
+ * refetch. Only plain objects and arrays are walked; anything else compares by `===`.
+ */
+export function replaceEqualDeep<T>(previous: unknown, next: T): T {
+    if (previous === next) return next;
+
+    const bothArrays = Array.isArray(previous) && Array.isArray(next);
+    if (!bothArrays && !(isPlainObject(previous) && isPlainObject(next))) return next;
+
+    const previousItems = previous as Record<string, unknown>;
+    const nextItems = next as Record<string, unknown>;
+    const previousKeys = Object.keys(previousItems);
+    const nextKeys = Object.keys(nextItems);
+    const merged = (bothArrays ? [] : {}) as Record<string, unknown>;
+    let unchanged = 0;
+
+    for (const key of nextKeys) {
+        merged[key] = replaceEqualDeep(previousItems[key], nextItems[key]);
+        if (merged[key] === previousItems[key] && Object.prototype.hasOwnProperty.call(previousItems, key)) unchanged++;
+    }
+
+    return (previousKeys.length === nextKeys.length && unchanged === previousKeys.length ? previous : merged) as T;
+}

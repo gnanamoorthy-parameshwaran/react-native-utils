@@ -13,7 +13,7 @@ Managing server data well means solving the problems below. This is where `useQu
 | Reflecting updates to data as quickly as possible | Partial | `invalidateQueries` refetches every visible query with a matching key at once. A single component's `refetch()` doesn't update other components showing the same key, and the cache can't be written directly (no `setQueryData` or optimistic updates). |
 | Performance optimizations like pagination and lazy loading data | Partial | Page-number pagination with `keepPreviousData`, and lazy loading with `enabled`. Append-as-you-scroll lists (`useInfiniteQuery`) are not available yet. |
 | Managing memory and garbage collection of server state | Covered | Every cache write first drops all expired entries, and results with no `ttl` are never stored, so memory holds only data fetched within its TTL. There is no separate cache-size cap or post-unmount grace period (`gcTime`). |
-| Memoizing query results with structural sharing | Not covered | Each fetch returns a new object, so components re-render with every result even if the data is unchanged. |
+| Memoizing query results with structural sharing | Covered | Each new result is merged into the data already on screen: unchanged parts keep their previous object references, and a fully unchanged result keeps the same `data` reference. Memoized rows, `useMemo` and effects that depend on unchanged items skip work after a refetch. |
 
 Most screens in our apps talk to the backend in the same way: a raw `fetch` call, a `useState` for
 loading, a `try/catch`, and a manual check of `response.ok`. That works for one screen. Across a
@@ -135,6 +135,10 @@ Problems it solves:
 - **One spinner for every situation.** `isLoading` is true only when there is nothing to show yet;
   `isFetching` is true for any request, including background refetches. Screens can show a
   full-screen loader for the first load and a small indicator for refreshes.
+- **Every refetch re-rendering every row.** A fresh JSON response is all new objects, so memoized
+  list rows re-render even when their item didn't change. `useQuery` reuses the previous objects
+  for every unchanged part of the result (structural sharing), so only rows whose data changed
+  re-render.
 - **Lazy and conditional loading.** `enabled: false` holds a query until its inputs are ready,
   for example until a selected item exists.
 

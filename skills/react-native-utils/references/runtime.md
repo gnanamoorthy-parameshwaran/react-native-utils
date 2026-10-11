@@ -93,6 +93,9 @@ matching queries that are mounted, enabled and focused refetch.
 - Components on the same key share one in-flight request (`inflight` map). Invalidation drops
   matching in-flight requests, so a refetch after a mutation always sends a new request.
 - A response is ignored by a component if it unmounted, its key changed, or a newer fetch started.
+- Results are structurally shared: unchanged parts keep their previous object references, and an
+  unchanged result keeps the same `data` reference, so `React.memo` rows and `data`-dependent
+  effects only react to real changes.
 - A key change reads that key's own cache entry. Without `keepPreviousData`, an uncached key starts
   with `data: undefined`.
 - `onSuccess` fires only after a network fetch, not on a cache hit.

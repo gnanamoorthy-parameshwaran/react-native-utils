@@ -1,7 +1,7 @@
 import React from 'react';
 
 import APIContext from './context/APIContext';
-import {hashKey, matchKey, parseResponseBody, validateAndThrowExceptions} from './util';
+import {hashKey, matchKey, parseResponseBody, replaceEqualDeep, validateAndThrowExceptions} from './util';
 
 import type {CreateAPIProps, EmitEvent, FetchProps, QueryKey, RequestBody, Retry, UseQueryOptions, UseQueryResult} from './types';
 
@@ -167,6 +167,10 @@ export default function createAPI({
 
         const currentHash = React.useRef(hash);
         currentHash.current = hash;
+
+        /** The data on screen now, so a new result can reuse its unchanged parts (structural sharing). */
+        const currentData = React.useRef(state.data);
+        currentData.current = state.data;
         const isActive = React.useRef(true);
 
         /** Without a focus hook every mounted query counts as focused; with one, it tracks focus and blur. */
@@ -186,7 +190,13 @@ export default function createAPI({
                 if (!force) {
                     const cached = readCache<T>(hash);
                     if (cached !== undefined) {
-                        setState({hash, data: cached, error: null, isFetching: false, isPlaceholderData: false});
+                        setState({
+                            hash,
+                            data: replaceEqualDeep(currentData.current, cached),
+                            error: null,
+                            isFetching: false,
+                            isPlaceholderData: false,
+                        });
                         return;
                     }
                 }
@@ -198,8 +208,11 @@ export default function createAPI({
                 if (!running) {
                     const promise = fn({request: options => send(options, emit)})
                         .then(data => {
-                            if (inflight.get(hash)?.promise === promise) writeCache({hash, queryKey: key, data, ttl: entryTtl});
-                            return data;
+                            if (inflight.get(hash)?.promise !== promise) return data;
+
+                            const shared = replaceEqualDeep(cache.get(hash)?.data, data);
+                            writeCache({hash, queryKey: key, data: shared, ttl: entryTtl});
+                            return shared;
                         })
                         .finally(() => {
                             if (inflight.get(hash)?.promise === promise) inflight.delete(hash);
@@ -209,9 +222,10 @@ export default function createAPI({
                 }
 
                 try {
-                    const data = (await running.promise) as T;
+                    const result = (await running.promise) as T;
                     if (isStale()) return;
 
+                    const data = replaceEqualDeep(currentData.current, result);
                     setState({hash, data, error: null, isFetching: false, isPlaceholderData: false});
                     success?.(data);
                 } catch (error) {

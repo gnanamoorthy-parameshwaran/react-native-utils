@@ -1,5 +1,6 @@
 import React from 'react';
-import {act, renderHook, waitFor} from '@testing-library/react-native';
+import {Text} from 'react-native';
+import {act, render, renderHook, waitFor} from '@testing-library/react-native';
 
 import createAPI from '../client';
 import {hashKey} from '../util';
@@ -167,6 +168,56 @@ describe('useQuery', () => {
 
         deleteSpy.mockRestore();
         setSpy.mockRestore();
+    });
+
+    it('keeps the same data reference when a refetch returns unchanged data', async () => {
+        const {useQuery} = createAPI({baseURL: 'https://example.test', queryTtl: 60_000});
+        const queryFn = jest.fn(async () => [{id: 1, title: 'a'}]);
+
+        const {result} = renderHook(() => useQuery({queryKey: ['same'], queryFn}));
+        await waitFor(() => expect(result.current.data).toBeDefined());
+        const before = result.current.data;
+
+        await act(() => result.current.refetch());
+        expect(queryFn).toHaveBeenCalledTimes(2);
+        expect(result.current.data).toBe(before);
+    });
+
+    it('re-renders only the memoized rows whose item changed', async () => {
+        const {useQuery} = createAPI({baseURL: 'https://example.test', queryTtl: 60_000});
+        type Item = {id: number; title: string};
+        let response: Item[] = [
+            {id: 1, title: 'a'},
+            {id: 2, title: 'b'},
+            {id: 3, title: 'c'},
+        ];
+        const rowRenders: Record<number, number> = {};
+
+        const Row = React.memo(function Row({item}: {item: Item}) {
+            rowRenders[item.id] = (rowRenders[item.id] ?? 0) + 1;
+            return <Text>{item.title}</Text>;
+        });
+        let refetch: () => Promise<void> = async () => {};
+        function List() {
+            const query = useQuery({queryKey: ['rows'], queryFn: async () => JSON.parse(JSON.stringify(response)) as Item[]});
+            refetch = query.refetch;
+            return (
+                <>
+                    {query.data?.map(item => (
+                        <Row key={item.id} item={item} />
+                    ))}
+                </>
+            );
+        }
+
+        const screen = render(<List />);
+        await waitFor(() => expect(screen.getByText('c')).toBeTruthy());
+
+        response = [response[0]!, {id: 2, title: 'b (edited)'}, response[2]!];
+        await act(() => refetch());
+
+        expect(screen.getByText('b (edited)')).toBeTruthy();
+        expect(rowRenders).toEqual({1: 1, 2: 2, 3: 1});
     });
 
     it('calls onSuccess and onError', async () => {

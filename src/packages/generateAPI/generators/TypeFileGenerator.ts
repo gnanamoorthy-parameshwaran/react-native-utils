@@ -13,12 +13,14 @@ type SchemaGroup = {schemaKeys: string[]; synthesized: SynthesizedType[]};
  * framework-neutral, so every framework driver shares this output.
  */
 export default class TypeFileGenerator {
-    protected typeResolver = new TypeResolver();
+    protected typeResolver: TypeResolver;
 
     constructor(
         protected parsed: ParsedAPI,
         protected config: ClientGeneratorConfig,
-    ) {}
+    ) {
+        this.typeResolver = new TypeResolver(parsed.schemas);
+    }
 
     public generate(): GeneratedFile[] {
         return this.typeFiles();
@@ -84,9 +86,8 @@ export default class TypeFileGenerator {
             const schema = this.parsed.schemas[key];
             if (!schema) return;
 
-            const {statements, refs: memberRefs} = this.typeResolver.resolveMembers(schema);
+            const {text: body, refs: memberRefs} = this.typeResolver.resolveNamed(schema);
             memberRefs.forEach(ref => refs.add(ref));
-            const body = statements.length ? `{ ${statements.join(' ')} }` : 'Record<string, unknown>';
             const doc = DocUtil.block([schema.description ?? schema.title, schema.deprecated ? '@deprecated' : undefined]);
             bodyParts.push(`${doc ? `${doc}\n` : ''}export type ${key} = ${body};`);
         });

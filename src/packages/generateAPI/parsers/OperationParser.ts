@@ -26,7 +26,7 @@ export default class OperationParser {
     constructor(spec: OpenAPI) {
         this.spec = spec;
 
-        const typeResolver = new TypeResolver();
+        const typeResolver = new TypeResolver(spec.components?.schemas);
         this.parameters = new ParameterResolver(typeResolver);
         this.requestBodies = new RequestBodyResolver(typeResolver);
         this.responses = new ResponseResolver(typeResolver);

@@ -33,7 +33,7 @@ and update this file when a decision changes.
 - **`generateAPI`** emits typed API clients only (`use{Resource}()` hooks on top of `useAPI`). It never
   emits query hooks, cache options or invalidate helpers; an `x-cache-config` spec extension is ignored.
   Caching a generated method is done on the screen by calling it inside `useQuery`.
-- `createAPI()` returns `{useAPI, useQuery, invalidateQueries}`. There is no `queryClient` object.
+- `createAPI()` returns `{useAPI, useQuery, useInfiniteQuery, invalidateQueries}`. There is no `queryClient` object.
 
 ## useQuery: decisions
 
@@ -45,6 +45,8 @@ and update this file when a decision changes.
 | Deduplication | Same-key fetches share one in-flight request. Invalidation drops matching in-flight requests so a refetch never reuses a request from before it. |
 | Persistence | In memory only. Cache drivers (Memory, AsyncStorage, Tagged) were removed; a persistence driver may come later. |
 | Screen focus | Navigation hooks are injected: `createAPI({useFocusEffect})`. The library never imports a navigation package. On focus a query revalidates only if stale; invalidation refetches only focused queries, and background screens fetch when they regain focus. |
+| Shared engine | `useQuery` and `useInfiniteQuery` are thin wrappers over an internal `useCachedQuery` that takes a `fetcher(context: {request, mode, current})`; its fetch runs as `revalidate`, `refetch` or `next`. New query hooks should reuse it rather than copy it. |
+| Infinite lists | `useInfiniteQuery` caches the whole list as one entry `{pages, pageParams}`. Any refresh reloads **only the first page** (user's choice, like pull-to-refresh). Forward only (`getNextPageParam`, `fetchNextPage`), no page limit. `fetchNextPage` is a no-op without a next page or while any request for the list runs. |
 | App foreground / reconnect | Both opt-in. `revalidateOnAppForeground` uses React Native's own `AppState`; connectivity is injected with `subscribeToNetwork(listener => () => void)` so no network package is imported. On a background → active or offline → online transition, visible (mounted, enabled, focused) stale or failed queries revalidate. Listeners live while at least one query is mounted. |
 | Pagination | `keepPreviousData` keeps the previous key's data as placeholder. `isLoading` = nothing to show yet, `isFetching` = any request in flight, `isPlaceholderData` = showing the previous key's data. |
 | Memory | Every cache write first drops entries past `cacheTime`; with both times 0 nothing is stored. |
@@ -71,7 +73,12 @@ and update this file when a decision changes.
 
 ## Planned, not done yet
 
-- `useInfiniteQuery` (append-as-you-scroll lists), built on the same cache.
 - A persistence driver.
 - A cache size cap (LRU) if many keys are created within one `cacheTime`.
-- `setQueryData` / optimistic updates.
+- **Faster updates after mutations (postponed by the user, 2026-10-11), as one piece of work:**
+    1. Share cache writes between components: a `subscribers` map per key hash, notified from
+       `writeCache`, so one component's `refetch()` updates every component on that key.
+    2. `setQueryData` / `getQueryData` returned from `createAPI`, writing through `writeCache`, so a
+       mutation's response updates the cache without a second request.
+    3. A `useMutation` hook on top of 1 and 2: snapshot with `getQueryData`, optimistic update with
+       `setQueryData`, roll back on error, then `invalidateQueries` to reconcile.

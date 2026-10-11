@@ -19,13 +19,13 @@ npm install @gnanamoorthy/react-native-utils
 // src/hooks/useAPI.ts
 import {createAPI} from '@gnanamoorthy/react-native-utils';
 
-const {useAPI, useQuery, invalidateQueries} = createAPI({
+const {useAPI, useQuery, useInfiniteQuery, invalidateQueries} = createAPI({
     baseURL: 'https://api.example.com',
     staleTime: 60_000, // optional: how long data is fresh (ms); default 0 = revalidate on every mount
     cacheTime: 5 * 60_000, // optional: how long unused data stays in memory (ms); this is the default
 });
 
-export {useQuery, invalidateQueries};
+export {useQuery, useInfiniteQuery, invalidateQueries};
 export default useAPI;
 ```
 
@@ -79,7 +79,24 @@ createAPI({
     subscribeToNetwork: listener => NetInfo.addEventListener(state => listener(!!state.isConnected)),
 });
 ```
-Infinite queries (append-as-you-scroll lists) are not implemented yet.
+Lists that load page by page as they scroll use `useInfiniteQuery`. The whole list is one cache
+entry, and a refresh (pull to refresh, invalidation, stale revalidation) reloads only the first page:
+
+```tsx
+const {data, fetchNextPage, hasNextPage, isFetchingNextPage, isFetching, refetch} = useInfiniteQuery({
+    queryKey: ['posts', 'infinite'],
+    queryFn: ({request, pageParam}) => request<Post[]>({endpoint: `/posts?page=${pageParam}`}),
+    initialPageParam: 1,
+    getNextPageParam: (lastPage, _allPages, lastPageParam) => (lastPage.length ? lastPageParam + 1 : undefined),
+});
+
+<FlatList
+    data={data?.pages.flat()}
+    onEndReached={() => fetchNextPage()} // safe to call repeatedly
+    refreshing={isFetching && !isFetchingNextPage}
+    onRefresh={refetch}
+/>;
+```
 
 ### Generating typed hooks from OpenAPI
 
@@ -104,7 +121,7 @@ upgrading the package to keep the instructions in step with the installed versio
 
 ### Migrating from 1.x
 
-- `createAPI()` now returns `{useAPI, useQuery, invalidateQueries}` instead of the `useAPI` hook
+- `createAPI()` now returns `{useAPI, useQuery, useInfiniteQuery, invalidateQueries}` instead of the `useAPI` hook
   itself.
 - `useAPI()` returns `{loading, request}`. `cacheConfig`, `invalidateCache` and
   `invalidateCacheGroup` are gone:

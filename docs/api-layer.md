@@ -11,7 +11,7 @@ Managing server data well means solving the problems below. This is where `useQu
 | Updating "out of date" data in the background | Covered | Stale data stays on screen (`isFetching: true`) while a background request replaces it: on remount, on screen focus, after `invalidateQueries` and on `refetch()`. Data is only dropped after `cacheTime`, when the next mount starts blank. |
 | Knowing when data is "out of date" | Covered | Data is fresh for `staleTime`, then stale. `invalidateQueries` marks matching data stale immediately. Stale data on screen revalidates when its screen regains focus (`useFocusEffect`), when the app returns to the foreground (`revalidateOnAppForeground`) and when the network comes back (`subscribeToNetwork`); the last two are opt-in. |
 | Reflecting updates to data as quickly as possible | Partial | `invalidateQueries` refetches every visible query with a matching key at once. A single component's `refetch()` doesn't update other components showing the same key, and the cache can't be written directly (no `setQueryData` or optimistic updates). |
-| Performance optimizations like pagination and lazy loading data | Partial | Page-number pagination with `keepPreviousData`, and lazy loading with `enabled`. Append-as-you-scroll lists (`useInfiniteQuery`) are not available yet. |
+| Performance optimizations like pagination and lazy loading data | Covered | Page-number pagination with `keepPreviousData`, append-as-you-scroll lists with `useInfiniteQuery` (`fetchNextPage`, `hasNextPage`), and lazy loading with `enabled`. |
 | Managing memory and garbage collection of server state | Covered | Data is kept for `cacheTime` (5 minutes by default) and every cache write first drops entries past it; results with both times at 0 are never stored. There is no separate cache-size cap. |
 | Memoizing query results with structural sharing | Covered | Each new result is merged into the data already on screen: unchanged parts keep their previous object references, and a fully unchanged result keeps the same `data` reference. Memoized rows, `useMemo` and effects that depend on unchanged items skip work after a refetch. |
 
@@ -38,7 +38,7 @@ problems.
 pipeline.
 
 ```ts
-const {useAPI, useQuery, invalidateQueries} = createAPI({
+const {useAPI, useQuery, useInfiniteQuery, invalidateQueries} = createAPI({
     baseURL: 'https://api.example.com',
     throwException: true,
     onBeforeRequest: async ({headers}) => {
@@ -146,6 +146,10 @@ Problems it solves:
   list rows re-render even when their item didn't change. `useQuery` reuses the previous objects
   for every unchanged part of the result (structural sharing), so only rows whose data changed
   re-render.
+- **Hand-built "load more" lists.** Appending pages by hand means tracking the page number, a
+  "has more" flag, a loading-more flag and guarding against duplicate loads from `onEndReached`.
+  `useInfiniteQuery` does all of it and caches the whole list as one entry, so it is shown instantly
+  when the user comes back.
 - **Lazy and conditional loading.** `enabled: false` holds a query until its inputs are ready,
   for example until a selected item exists.
 
@@ -231,6 +235,6 @@ the others when it needs them.
 To set expectations accurately:
 
 - The query cache lives in memory; it does not persist across app restarts.
-- Append-as-you-scroll lists (`useInfiniteQuery`) are not available yet; page-number pagination
-  is supported through `keepPreviousData`.
+- `useInfiniteQuery` loads forward only, keeps every loaded page (no page limit), and reloads only
+  the first page on refresh.
 - The generator emits React hooks; other output shapes need a custom generator module.

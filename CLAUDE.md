@@ -19,6 +19,9 @@ and update this file when a decision changes.
 
 ## Commits
 
+- **Never commit right after making changes.** Stop, summarize the changes and ask the user to review
+  them. Commit only when the user explicitly asks in a later message; an approved plan that mentions
+  commits is not a request to commit.
 - Conventional commits (enforced by commitlint), grouped by topic, one concern per commit.
 - No `Co-Authored-By` trailer.
 - Work on a feature branch, not `main`; push only when asked.

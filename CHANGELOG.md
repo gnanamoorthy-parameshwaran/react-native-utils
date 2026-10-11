@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.0.1](https://github.com/gnanamoorthy-parameshwaran/react-native-utils/compare/v2.0.0...v2.0.1) (2026-10-11)
+
+
+### Bug Fixes
+
+* **generateAPI:** resolve allOf, named enums and other schemas that came out unknown ([49bc20a](https://github.com/gnanamoorthy-parameshwaran/react-native-utils/commit/49bc20a4782b12f6650295e9afce4d190f964dd5))
+
 # [2.0.0](https://github.com/gnanamoorthy-parameshwaran/react-native-utils/compare/v1.4.0...v2.0.0) (2026-10-11)
 
 

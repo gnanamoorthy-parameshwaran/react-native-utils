@@ -1,5 +1,6 @@
 export {default as createAPI} from './packages/createAPI';
 export * from './packages/createAPI';
+export * from './packages/theme';
 
 export {default as ArrayUtils} from './utils/ArrayUtils';
 export {default as CurrencyUtil} from './utils/CurrencyUtil';

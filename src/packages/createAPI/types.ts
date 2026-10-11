@@ -19,11 +19,13 @@ export type CreateAPIProps = {
     onAfterResponse?: OnAfterResponse;
     onError?: OnError;
     maxRetries?: number;
-    /** Default `ttl` (ms) for `useQuery` when a query doesn't set its own. Defaults to 0 (no caching). */
-    queryTtl?: number;
+    /** Default `staleTime` (ms) for queries that don't set one. Defaults to 0: revalidate on every mount. */
+    staleTime?: number;
+    /** Default `cacheTime` (ms) for queries that don't set one. Defaults to 5 minutes. */
+    cacheTime?: number;
     /**
      * Your navigation library's focus hook, e.g. React Navigation's `useFocusEffect`.
-     * When given, a query fetches again on screen focus if its cache has expired.
+     * When given, a query revalidates on screen focus if its data is stale.
      */
     useFocusEffect?: UseFocusEffect;
 };
@@ -55,8 +57,10 @@ export type QueryFunctionContext = {
 export type UseQueryOptions<T> = {
     queryKey: QueryKey;
     queryFn: (context: QueryFunctionContext) => Promise<T>;
-    /** How long (ms) a result is served from cache before the next mount refetches. Defaults to `createAPI`'s `queryTtl`. */
-    ttl?: number;
+    /** How long (ms) a result counts as fresh and is served with no request. Afterwards it is stale: still shown, but revalidated in the background on the next mount or focus. Defaults to `createAPI`'s `staleTime`. */
+    staleTime?: number;
+    /** How long (ms) a result stays in memory for reuse, including while stale. Defaults to `createAPI`'s `cacheTime`. */
+    cacheTime?: number;
     /** Set to false to defer fetching until it becomes true or `refetch()` is called. */
     enabled?: boolean;
     /** While a new key loads, keep showing the previous key's data (e.g. page 1 while page 2 loads). */

@@ -10,8 +10,8 @@ import type {UseFocusEffect} from '../types';
 const flush = () => act(() => new Promise<void>(resolve => setTimeout(resolve, 0)));
 
 describe('useQuery', () => {
-    it('fetches on mount and serves the cache within the ttl', async () => {
-        const {useQuery} = createAPI({baseURL: 'https://example.test', queryTtl: 60_000});
+    it('fetches on mount and serves the cache within the stale time', async () => {
+        const {useQuery} = createAPI({baseURL: 'https://example.test', staleTime: 60_000});
         const queryFn = jest.fn(async () => 'hello');
 
         const first = renderHook(() => useQuery({queryKey: ['greeting'], queryFn}));
@@ -25,21 +25,21 @@ describe('useQuery', () => {
         expect(queryFn).toHaveBeenCalledTimes(1);
     });
 
-    it('refetches once the ttl has passed', async () => {
+    it('refetches once the stale time has passed', async () => {
         const {useQuery} = createAPI({baseURL: 'https://example.test'});
         const queryFn = jest.fn(async () => 'value');
 
-        const first = renderHook(() => useQuery({queryKey: ['k'], queryFn, ttl: 20}));
+        const first = renderHook(() => useQuery({queryKey: ['k'], queryFn, staleTime: 20}));
         await waitFor(() => expect(first.result.current.data).toBe('value'));
         first.unmount();
 
         await act(() => new Promise<void>(resolve => setTimeout(resolve, 30)));
-        renderHook(() => useQuery({queryKey: ['k'], queryFn, ttl: 20}));
+        renderHook(() => useQuery({queryKey: ['k'], queryFn, staleTime: 20}));
         await waitFor(() => expect(queryFn).toHaveBeenCalledTimes(2));
     });
 
     it('does not fetch while disabled, and fetches once enabled', async () => {
-        const {useQuery} = createAPI({baseURL: 'https://example.test', queryTtl: 60_000});
+        const {useQuery} = createAPI({baseURL: 'https://example.test', staleTime: 60_000});
         const queryFn = jest.fn(async () => 1);
 
         const {result, rerender} = renderHook(({enabled}: {enabled: boolean}) => useQuery({queryKey: ['lazy'], queryFn, enabled}), {
@@ -54,7 +54,7 @@ describe('useQuery', () => {
     });
 
     it('keeps the previous page on screen while the next page loads with keepPreviousData', async () => {
-        const {useQuery} = createAPI({baseURL: 'https://example.test', queryTtl: 60_000});
+        const {useQuery} = createAPI({baseURL: 'https://example.test', staleTime: 60_000});
         const queryFn = jest.fn(async ({page}: {page: number}) => `page ${page}`);
 
         const {result, rerender} = renderHook(
@@ -72,7 +72,7 @@ describe('useQuery', () => {
     });
 
     it('goes blank on a new key without keepPreviousData', async () => {
-        const {useQuery} = createAPI({baseURL: 'https://example.test', queryTtl: 60_000});
+        const {useQuery} = createAPI({baseURL: 'https://example.test', staleTime: 60_000});
 
         const {result, rerender} = renderHook(
             ({page}: {page: number}) => useQuery({queryKey: ['list', {page}], queryFn: async () => `page ${page}`}),
@@ -88,7 +88,7 @@ describe('useQuery', () => {
     });
 
     it('reports a refetch over existing data as isFetching, not isLoading', async () => {
-        const {useQuery} = createAPI({baseURL: 'https://example.test', queryTtl: 60_000});
+        const {useQuery} = createAPI({baseURL: 'https://example.test', staleTime: 60_000});
         let resolve: (value: string) => void = () => {};
         const queryFn = jest
             .fn()
@@ -108,7 +108,7 @@ describe('useQuery', () => {
     });
 
     it('invalidates by key prefix: refetches mounted queries and clears unmounted ones', async () => {
-        const {useQuery, invalidateQueries} = createAPI({baseURL: 'https://example.test', queryTtl: 60_000});
+        const {useQuery, invalidateQueries} = createAPI({baseURL: 'https://example.test', staleTime: 60_000});
         const postFn = jest.fn(async () => 'post');
         const userFn = jest.fn(async () => 'user');
 
@@ -131,7 +131,7 @@ describe('useQuery', () => {
     });
 
     it('makes one request for two components on the same key, on mount and on invalidation', async () => {
-        const {useQuery, invalidateQueries} = createAPI({baseURL: 'https://example.test', queryTtl: 60_000});
+        const {useQuery, invalidateQueries} = createAPI({baseURL: 'https://example.test', staleTime: 60_000});
         const queryFn = jest.fn(async () => 'shared');
 
         const a = renderHook(() => useQuery({queryKey: ['posts', {page: 1}], queryFn}));
@@ -144,25 +144,25 @@ describe('useQuery', () => {
         expect(queryFn).toHaveBeenCalledTimes(2);
     });
 
-    it('drops expired entries from memory on the next write, and never stores results without a ttl', async () => {
+    it('drops expired entries from memory on the next write, and never stores results with no stale or cache time', async () => {
         const {useQuery} = createAPI({baseURL: 'https://example.test'});
         const deleteSpy = jest.spyOn(Map.prototype, 'delete');
         const setSpy = jest.spyOn(Map.prototype, 'set');
         const cacheWrites = () =>
             setSpy.mock.calls.filter(([, value]) => typeof value === 'object' && value !== null && 'expiresAt' in value).map(([key]) => key);
 
-        const old = renderHook(() => useQuery({queryKey: ['old'], queryFn: async () => 'old', ttl: 10}));
+        const old = renderHook(() => useQuery({queryKey: ['old'], queryFn: async () => 'old', staleTime: 10, cacheTime: 10}));
         await waitFor(() => expect(old.result.current.data).toBe('old'));
         old.unmount();
         expect(cacheWrites()).toContain(hashKey(['old']));
 
         await act(() => new Promise<void>(resolve => setTimeout(resolve, 20)));
         deleteSpy.mockClear();
-        const fresh = renderHook(() => useQuery({queryKey: ['fresh'], queryFn: async () => 'fresh', ttl: 60_000}));
+        const fresh = renderHook(() => useQuery({queryKey: ['fresh'], queryFn: async () => 'fresh', staleTime: 60_000}));
         await waitFor(() => expect(fresh.result.current.data).toBe('fresh'));
         expect(deleteSpy).toHaveBeenCalledWith(hashKey(['old']));
 
-        const uncached = renderHook(() => useQuery({queryKey: ['uncached'], queryFn: async () => 'uncached', ttl: 0}));
+        const uncached = renderHook(() => useQuery({queryKey: ['uncached'], queryFn: async () => 'uncached', staleTime: 0, cacheTime: 0}));
         await waitFor(() => expect(uncached.result.current.data).toBe('uncached'));
         expect(cacheWrites()).not.toContain(hashKey(['uncached']));
 
@@ -171,7 +171,7 @@ describe('useQuery', () => {
     });
 
     it('keeps the same data reference when a refetch returns unchanged data', async () => {
-        const {useQuery} = createAPI({baseURL: 'https://example.test', queryTtl: 60_000});
+        const {useQuery} = createAPI({baseURL: 'https://example.test', staleTime: 60_000});
         const queryFn = jest.fn(async () => [{id: 1, title: 'a'}]);
 
         const {result} = renderHook(() => useQuery({queryKey: ['same'], queryFn}));
@@ -184,7 +184,7 @@ describe('useQuery', () => {
     });
 
     it('re-renders only the memoized rows whose item changed', async () => {
-        const {useQuery} = createAPI({baseURL: 'https://example.test', queryTtl: 60_000});
+        const {useQuery} = createAPI({baseURL: 'https://example.test', staleTime: 60_000});
         type Item = {id: number; title: string};
         let response: Item[] = [
             {id: 1, title: 'a'},
@@ -218,6 +218,72 @@ describe('useQuery', () => {
 
         expect(screen.getByText('b (edited)')).toBeTruthy();
         expect(rowRenders).toEqual({1: 1, 2: 2, 3: 1});
+    });
+
+    it('shows stale data instantly on remount and revalidates it in the background', async () => {
+        const {useQuery} = createAPI({baseURL: 'https://example.test'});
+        let resolveNext: (value: string) => void = () => {};
+        const queryFn = jest
+            .fn()
+            .mockResolvedValueOnce('v1')
+            .mockImplementationOnce(() => new Promise<string>(resolve => (resolveNext = resolve)));
+
+        const first = renderHook(() => useQuery<string>({queryKey: ['swr'], queryFn, staleTime: 10}));
+        await waitFor(() => expect(first.result.current.data).toBe('v1'));
+        first.unmount();
+
+        await act(() => new Promise<void>(resolve => setTimeout(resolve, 20)));
+        const second = renderHook(() => useQuery<string>({queryKey: ['swr'], queryFn, staleTime: 10}));
+        expect(second.result.current).toMatchObject({data: 'v1', isLoading: false, isFetching: true});
+
+        await act(async () => resolveNext('v2'));
+        expect(second.result.current).toMatchObject({data: 'v2', isFetching: false});
+        expect(queryFn).toHaveBeenCalledTimes(2);
+    });
+
+    it('revalidates on every mount by default (staleTime 0) while showing the cached data', async () => {
+        const {useQuery} = createAPI({baseURL: 'https://example.test'});
+        const queryFn = jest.fn(async () => 'data');
+
+        const first = renderHook(() => useQuery({queryKey: ['default'], queryFn}));
+        await waitFor(() => expect(first.result.current.data).toBe('data'));
+        first.unmount();
+
+        const second = renderHook(() => useQuery({queryKey: ['default'], queryFn}));
+        expect(second.result.current).toMatchObject({data: 'data', isLoading: false});
+        await waitFor(() => expect(queryFn).toHaveBeenCalledTimes(2));
+        await waitFor(() => expect(second.result.current.isFetching).toBe(false));
+    });
+
+    it('starts blank once the cache time has passed', async () => {
+        const {useQuery} = createAPI({baseURL: 'https://example.test'});
+        const queryFn = jest.fn(async () => 'data');
+
+        const first = renderHook(() => useQuery({queryKey: ['gone'], queryFn, staleTime: 5, cacheTime: 10}));
+        await waitFor(() => expect(first.result.current.data).toBe('data'));
+        first.unmount();
+
+        await act(() => new Promise<void>(resolve => setTimeout(resolve, 20)));
+        const second = renderHook(() => useQuery({queryKey: ['gone'], queryFn, staleTime: 5, cacheTime: 10}));
+        expect(second.result.current).toMatchObject({data: undefined, isLoading: true});
+        await waitFor(() => expect(second.result.current).toMatchObject({data: 'data', isLoading: false}));
+    });
+
+    it('keeps invalidated data for unmounted screens, showing it while they revalidate', async () => {
+        const {useQuery, invalidateQueries} = createAPI({baseURL: 'https://example.test', staleTime: 60_000});
+        const queryFn = jest.fn(async () => 'post');
+
+        const hidden = renderHook(() => useQuery({queryKey: ['posts', {id: 2}], queryFn}));
+        await waitFor(() => expect(hidden.result.current.data).toBe('post'));
+        hidden.unmount();
+
+        await act(() => invalidateQueries(['posts']));
+        expect(queryFn).toHaveBeenCalledTimes(1);
+
+        const again = renderHook(() => useQuery({queryKey: ['posts', {id: 2}], queryFn}));
+        expect(again.result.current).toMatchObject({data: 'post', isLoading: false, isFetching: true});
+        await waitFor(() => expect(queryFn).toHaveBeenCalledTimes(2));
+        await waitFor(() => expect(again.result.current.isFetching).toBe(false));
     });
 
     it('calls onSuccess and onError', async () => {
@@ -300,7 +366,7 @@ describe('useQuery with useFocusEffect', () => {
         const queryFn = jest.fn(async () => 'data');
         const screen = createScreen(true);
 
-        renderHook(() => useQuery({queryKey: ['focus'], queryFn, ttl: 30}), onScreen(screen));
+        renderHook(() => useQuery({queryKey: ['focus'], queryFn, staleTime: 30}), onScreen(screen));
         await waitFor(() => expect(queryFn).toHaveBeenCalledTimes(1));
 
         await screen.blur();
@@ -325,7 +391,7 @@ describe('useQuery with useFocusEffect', () => {
     });
 
     it('refetches the focused screen on invalidation, and a background screen only when it regains focus', async () => {
-        const {useQuery, invalidateQueries} = createAPI({baseURL: 'https://example.test', queryTtl: 60_000, useFocusEffect: useFakeFocusEffect});
+        const {useQuery, invalidateQueries} = createAPI({baseURL: 'https://example.test', staleTime: 60_000, useFocusEffect: useFakeFocusEffect});
         const listFn = jest.fn(async () => 'list');
         const detailFn = jest.fn(async () => 'detail');
         const listScreen = createScreen(true);

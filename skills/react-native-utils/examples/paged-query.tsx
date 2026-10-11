@@ -15,7 +15,7 @@ export function PostsScreen() {
     const {data, error, isLoading, isFetching, isPlaceholderData} = useQuery({
         queryKey: ['posts', {page}],
         queryFn: ({request}) => request<Post[]>({endpoint: `/posts?page=${page}`}),
-        ttl: 60_000,
+        staleTime: 60_000,
         keepPreviousData: true,
     });
 

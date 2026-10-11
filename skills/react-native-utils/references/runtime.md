@@ -30,7 +30,8 @@ One `createAPI({...})` call per app, re-exported from a project file (convention
 | `maxRetries`                                             | Upper bound for `retry()` (default 1)                                               |
 | `throwException`                                         | Throw typed `API*Error` classes on non-2xx instead of returning the body            |
 | `onError({error, url, options, response, emitEvent})`    | Central error reporting; the error is rethrown afterwards                           |
-| `queryTtl`                                               | Default `ttl` (ms) for queries that don't set one; 0 = no caching                   |
+| `staleTime` | Default `staleTime` (ms) for queries that don't set one; default 0 = revalidate on every mount |
+| `cacheTime` | Default `cacheTime` (ms) for queries that don't set one; default 5 minutes |
 | `useFocusEffect`                                         | Optional focus hook, e.g. React Navigation's, for focus-aware queries               |
 
 Wrap the app root in `APIContextWrapper emitEvent={...}` so `emitEvent` reaches a handler (e.g. to log
@@ -55,7 +56,8 @@ await request<Thing>({method: 'POST', endpoint: '/v1/things', body: JSON.stringi
 const {data, error, isLoading, isFetching, isPlaceholderData, refetch} = useQuery({
     queryKey: ['things', {page}], // serializable array; object key order doesn't matter
     queryFn: ({request}) => request<Thing[]>({endpoint: `/v1/things?page=${page}`}),
-    ttl: 300_000, // ms served from cache before the next mount fetches
+    staleTime: 300_000, // ms the data is fresh: served from cache with no request
+    cacheTime: 600_000, // ms unused data stays in memory (stale data is shown while it revalidates)
     enabled: !!userId, // lazy: don't fetch until true
     keepPreviousData: true, // pagination: keep the previous page while the next loads
     onSuccess: data => {},
@@ -82,14 +84,19 @@ await invalidateQueries(); // everything
 ```
 
 Matching is by prefix, and object segments match partially: `['things', {userId: 1}]` also matches
-`['things', {userId: 1, page: 2}]`. Matching cache entries and in-flight requests are dropped, then
+`['things', {userId: 1, page: 2}]`. Matching cache entries are marked stale and matching in-flight requests dropped, then
 matching queries that are mounted, enabled and focused refetch.
 
 ## Behaviour (for debugging)
 
-- The cache is a flat `Map<hashKey(queryKey), {queryKey, data, expiresAt}>`, in memory only. Every
-  write first drops all expired entries (and an expired entry is also dropped when read); results
-  with `ttl` 0 are never stored.
+- The cache is a flat `Map<hashKey(queryKey), {queryKey, data, staleAt, expiresAt}>`, in memory only.
+  - Fresh (before `staleAt`): served with no request.
+  - Stale (until `expiresAt`): shown immediately with `isFetching: true` while a background request
+    revalidates it, on mount, focus or `refetch()`.
+  - Expired (after `expiresAt` = `max(staleTime, cacheTime)`): dropped on read and by the sweep that
+    runs before every cache write; the next mount starts blank. With both times 0 nothing is stored.
+- `invalidateQueries` marks matching entries stale (it doesn't delete them), so an unmounted screen
+  shows its old data on the next mount while it revalidates.
 - Components on the same key share one in-flight request (`inflight` map). Invalidation drops
   matching in-flight requests, so a refetch after a mutation always sends a new request.
 - A response is ignored by a component if it unmounted, its key changed, or a newer fetch started.
@@ -100,9 +107,9 @@ matching queries that are mounted, enabled and focused refetch.
   with `data: undefined`.
 - `onSuccess` fires only after a network fetch, not on a cache hit.
 - Focus (only when `useFocusEffect` is passed to `createAPI`):
-    - on focus, a query fetches only if its cache has expired; disabled queries are skipped
-    - `invalidateQueries` refetches only focused queries; background screens lose their cache entry
-      and fetch on their next focus
+    - on focus, a query revalidates only if its data is stale or gone; disabled queries are skipped
+    - `invalidateQueries` refetches only focused queries; background screens keep their data, marked
+      stale, and revalidate on their next focus
     - without the option, focus does nothing and every mounted, enabled match refetches on invalidation
 
 ## Not implemented yet

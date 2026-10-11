@@ -5,17 +5,21 @@ import {hashKey, matchKey, parseResponseBody, replaceEqualDeep, validateAndThrow
 
 import type {CreateAPIProps, EmitEvent, FetchProps, QueryKey, RequestBody, Retry, UseQueryOptions, UseQueryResult} from './types';
 
-type CacheEntry = {queryKey: QueryKey; data: unknown; expiresAt: number};
+type CacheEntry = {queryKey: QueryKey; data: unknown; staleAt: number; expiresAt: number};
 type MountedQuery = {queryKey: QueryKey; isEnabled: () => boolean; isFocused: () => boolean; refetch: () => Promise<void>};
 type QueryState<T> = {hash: string; data: T | undefined; error: unknown; isFetching: boolean; isPlaceholderData: boolean};
 
 /** Stand-in when no focus hook is passed to `createAPI`, so `useQuery` calls the same hooks every render. */
 function noFocusEffect(): void {}
 
+/** Default for how long unused query data stays in memory: 5 minutes. */
+const DEFAULT_CACHE_TIME = 5 * 60 * 1000;
+
 /**
  * Creates one API instance. `useAPI` is the request layer (base URL, hooks,
- * retry, errors) with a loading flag. `useQuery` caches results per query key
- * for `ttl` ms, and `invalidateQueries` clears them by key prefix.
+ * retry, errors) with a loading flag. `useQuery` caches results per query key:
+ * fresh for `staleTime`, then shown while revalidating in the background until
+ * `cacheTime`. `invalidateQueries` marks them stale by key prefix.
  */
 export default function createAPI({
     baseURL,
@@ -24,7 +28,8 @@ export default function createAPI({
     onAfterResponse,
     onError,
     maxRetries = 1,
-    queryTtl = 0,
+    staleTime: defaultStaleTime = 0,
+    cacheTime: defaultCacheTime = DEFAULT_CACHE_TIME,
     useFocusEffect = noFocusEffect,
 }: CreateAPIProps) {
     /**
@@ -104,37 +109,55 @@ export default function createAPI({
      */
     const inflight = new Map<string, {queryKey: QueryKey; promise: Promise<unknown>}>();
 
-    /** Returns cached data while it is fresh; an expired entry is dropped. */
-    function readCache<T>(hash: string): T | undefined {
+    /**
+     * Returns cached data until it expires, with whether it is stale. Stale data
+     * is still shown, but should be revalidated; an expired entry is dropped.
+     */
+    function readCache<T>(hash: string): {data: T; isStale: boolean} | undefined {
         const entry = cache.get(hash);
         if (!entry) return undefined;
 
-        if (entry.expiresAt <= Date.now()) {
+        const now = Date.now();
+        if (entry.expiresAt <= now) {
             cache.delete(hash);
             return undefined;
         }
 
-        return entry.data as T;
+        return {data: entry.data as T, isStale: entry.staleAt <= now};
     }
 
     /**
      * Stores a result, first dropping every expired entry so data nobody reads
-     * again doesn't stay in memory. A result with no `ttl` is never stored,
-     * since it would already count as expired.
+     * again doesn't stay in memory. The entry is kept for `cacheTime`, or at
+     * least until it goes stale; with both at 0 it is never stored.
      */
-    function writeCache({hash, queryKey, data, ttl}: {hash: string; queryKey: QueryKey; data: unknown; ttl: number}): void {
+    function writeCache({
+        hash,
+        queryKey,
+        data,
+        staleTime,
+        cacheTime,
+    }: {
+        hash: string;
+        queryKey: QueryKey;
+        data: unknown;
+        staleTime: number;
+        cacheTime: number;
+    }): void {
         const now = Date.now();
         cache.forEach((entry, key) => {
             if (entry.expiresAt <= now) cache.delete(key);
         });
 
-        if (ttl > 0) cache.set(hash, {queryKey, data, expiresAt: now + ttl});
+        const keepFor = Math.max(staleTime, cacheTime);
+        if (keepFor > 0) cache.set(hash, {queryKey, data, staleAt: now + staleTime, expiresAt: now + keepFor});
     }
 
     function useQuery<T>({
         queryKey,
         queryFn,
-        ttl = queryTtl,
+        staleTime = defaultStaleTime,
+        cacheTime = defaultCacheTime,
         enabled = true,
         keepPreviousData = false,
         onSuccess,
@@ -144,13 +167,15 @@ export default function createAPI({
         const hash = hashKey(queryKey);
 
         /**
-         * The state for the current key: its own cache entry if fresh. Otherwise,
-         * with `keepPreviousData`, the previous key's data stays on screen as
-         * placeholder (e.g. page 1 while page 2 loads) instead of going blank.
+         * The state for the current key: its own cache entry, fresh or stale (stale
+         * data is shown while it revalidates). Otherwise, with `keepPreviousData`,
+         * the previous key's data stays on screen as placeholder (e.g. page 1
+         * while page 2 loads) instead of going blank.
          */
         const stateForKey = (previous?: QueryState<T>): QueryState<T> => {
-            const data = readCache<T>(hash);
-            const isFetching = enabled && data === undefined;
+            const cached = readCache<T>(hash);
+            const data = cached?.data;
+            const isFetching = enabled && (cached === undefined || cached.isStale);
 
             if (data === undefined && keepPreviousData && previous?.data !== undefined) {
                 return {hash, data: previous.data, error: null, isFetching, isPlaceholderData: true};
@@ -162,8 +187,8 @@ export default function createAPI({
         if (state.hash !== hash) setState(stateForKey(state));
 
         /** The latest props, read when a fetch starts, so inline `queryFn`/callbacks are always current. */
-        const latest = React.useRef({queryKey, queryFn, ttl, enabled, onSuccess, onQueryError, emitEvent});
-        latest.current = {queryKey, queryFn, ttl, enabled, onSuccess, onQueryError, emitEvent};
+        const latest = React.useRef({queryKey, queryFn, staleTime, cacheTime, enabled, onSuccess, onQueryError, emitEvent});
+        latest.current = {queryKey, queryFn, staleTime, cacheTime, enabled, onSuccess, onQueryError, emitEvent};
 
         const currentHash = React.useRef(hash);
         currentHash.current = hash;
@@ -178,9 +203,10 @@ export default function createAPI({
         const lastFetch = React.useRef(0);
 
         /**
-         * Serves a fresh cache entry unless `force`, otherwise calls `queryFn`
-         * and caches the result. A response is ignored by this component if it
-         * unmounted, its key changed, or a newer fetch started meanwhile.
+         * Serves a fresh cache entry unless `force`. Stale data is shown right
+         * away while `queryFn` revalidates it in the background; with nothing
+         * cached, it simply fetches. A response is ignored by this component if
+         * it unmounted, its key changed, or a newer fetch started meanwhile.
          */
         const fetchData = React.useCallback(
             async (force: boolean) => {
@@ -189,19 +215,15 @@ export default function createAPI({
 
                 if (!force) {
                     const cached = readCache<T>(hash);
-                    if (cached !== undefined) {
-                        setState({
-                            hash,
-                            data: replaceEqualDeep(currentData.current, cached),
-                            error: null,
-                            isFetching: false,
-                            isPlaceholderData: false,
-                        });
-                        return;
+                    if (cached) {
+                        const data = replaceEqualDeep(currentData.current, cached.data);
+                        setState({hash, data, error: null, isFetching: cached.isStale, isPlaceholderData: false});
+                        if (!cached.isStale) return;
                     }
                 }
 
-                const {queryKey: key, queryFn: fn, ttl: entryTtl, onSuccess: success, onQueryError: failure, emitEvent: emit} = latest.current;
+                const {queryKey: key, queryFn: fn, onSuccess: success, onQueryError: failure, emitEvent: emit} = latest.current;
+                const times = {staleTime: latest.current.staleTime, cacheTime: latest.current.cacheTime};
                 setState(previous => ({...previous, isFetching: true}));
 
                 let running = inflight.get(hash);
@@ -211,7 +233,7 @@ export default function createAPI({
                             if (inflight.get(hash)?.promise !== promise) return data;
 
                             const shared = replaceEqualDeep(cache.get(hash)?.data, data);
-                            writeCache({hash, queryKey: key, data: shared, ttl: entryTtl});
+                            writeCache({hash, queryKey: key, data: shared, ...times});
                             return shared;
                         })
                         .finally(() => {
@@ -250,9 +272,9 @@ export default function createAPI({
         }, [fetchData, enabled]);
 
         /**
-         * On screen focus, fetch again only if the cache has expired (or was
-         * invalidated while the screen was in the background). The mount effect
-         * above may run alongside the first focus; both share one request.
+         * On screen focus, revalidate if the data is stale or gone (including
+         * after an invalidation while the screen was in the background). The
+         * mount effect above may run alongside the first focus; both share one request.
          */
         const onFocus = React.useCallback(() => {
             isFocused.current = true;
@@ -289,16 +311,17 @@ export default function createAPI({
     }
 
     /**
-     * Clears every cached entry whose key starts with `queryKey` (`['posts']`
-     * matches `['posts', {id: 1}]`; no key clears everything), then refetches
-     * the matching queries that are visible: mounted, enabled and focused.
-     * Background screens fetch when they regain focus, unmounted ones on their
-     * next mount. Matching in-flight requests are dropped too, so a refetch
-     * never reuses a request that started before the invalidation.
+     * Marks every cached entry whose key starts with `queryKey` as stale
+     * (`['posts']` matches `['posts', {id: 1}]`; no key matches everything),
+     * then refetches the matching queries that are visible: mounted, enabled
+     * and focused. Background screens revalidate when they regain focus,
+     * unmounted ones on their next mount, showing the old data meanwhile.
+     * Matching in-flight requests are dropped, so a refetch never reuses a
+     * request that started before the invalidation.
      */
     async function invalidateQueries(queryKey: QueryKey = []): Promise<void> {
         cache.forEach((entry, hash) => {
-            if (matchKey(entry.queryKey, queryKey)) cache.delete(hash);
+            if (matchKey(entry.queryKey, queryKey)) cache.set(hash, {...entry, staleAt: 0});
         });
         inflight.forEach((running, hash) => {
             if (matchKey(running.queryKey, queryKey)) inflight.delete(hash);

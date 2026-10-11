@@ -1,6 +1,6 @@
 /**
  * Caching a generated client method on a screen. The generator emits plain API
- * clients; the screen chooses the query key and TTL.
+ * clients; the screen chooses the query key and stale time.
  */
 import React from 'react';
 import {Text} from 'react-native';
@@ -23,7 +23,7 @@ export function InvoicesScreen({businessUnit}: {businessUnit: number}) {
     const {data} = useQuery({
         queryKey: ['invoices', {businessUnit, page}],
         queryFn: () => getInvoices({params: {page}}),
-        ttl: 300_000,
+        staleTime: 300_000,
         keepPreviousData: true,
     });
 

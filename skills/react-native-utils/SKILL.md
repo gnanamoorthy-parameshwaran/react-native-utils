@@ -10,7 +10,7 @@ The package provides:
 - **`createAPI`**: called once per app. Returns `{ useAPI, useQuery, invalidateQueries }`.
     - `useAPI()` → `{ loading, request }`: the request layer. Base URL, headers, auth, retry and
       typed errors are configured once in `createAPI`. No caching.
-    - `useQuery` → a screen-level hook. Each screen picks its own `queryKey` and `ttl`; results are
+    - `useQuery` → a screen-level hook. Each screen picks its own `queryKey` and `staleTime`; results are
       cached in memory and cleared by key prefix with `invalidateQueries`.
 - **`generate-client`** (CLI): reads the backend's OpenAPI spec and generates typed
   `use{Resource}()` client hooks built on `useAPI`. It generates **API clients only**; caching is

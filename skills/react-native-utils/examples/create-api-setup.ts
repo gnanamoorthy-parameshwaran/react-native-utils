@@ -15,7 +15,7 @@ const {useAPI, useQuery, invalidateQueries} = createAPI({
     baseURL: 'https://api.example.com',
     throwException: true,
     maxRetries: 1,
-    queryTtl: 60_000,
+    staleTime: 60_000,
     useFocusEffect,
     onBeforeRequest: async ({headers}) => {
         headers.set('Accept', 'application/json');

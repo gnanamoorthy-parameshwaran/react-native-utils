@@ -68,7 +68,7 @@ implementation.
 - One TypeScript file per resource group, containing the original schema types **and** synthesized
   request/response types for that resource's operations.
 - Every operation gets a generated `{Method}Response` type describing the **whole** success
-  response body — the envelope included, not just its `data` property (`null` for a no-content
+  response body — the envelope included, not just its `data` property (`undefined` for a no-content
   response). An earlier version unwrapped `data` and re-wrapped it in a shared
   `ResponseSuccessType<T> = { data: T }`; that dropped every sibling of `data`, so `login`'s
   `meta.token` and list endpoints' pagination `meta` were missing from the response types. There

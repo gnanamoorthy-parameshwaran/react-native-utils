@@ -44,6 +44,23 @@ with a plain unauthenticated GET. Output paths resolve relative to the config fi
   [../examples/generated-client-query.tsx](../examples/generated-client-query.tsx).
 - Generated files say "do not edit by hand"; change the spec or the generator instead.
 
+## How schemas become types
+
+| Schema                                                 | Generated type                                                                   |
+| ------------------------------------------------------ | -------------------------------------------------------------------------------- |
+| `allOf: [$ref X, {required: [k]}]` (Laravel/Scramble)  | `X & Required<Pick<X, 'k'>>`: `k` is non-optional; other members are intersected |
+| `anyOf` / `oneOf`                                      | a union                                                                          |
+| Named `enum` schema (e.g. `OrderStatus`)               | a union of its values, `'pending' \| 'completed'`                                |
+| `const`                                                | a literal type                                                                   |
+| `type: ["string", "null"]` and other 3.1 type lists    | a union of each type                                                             |
+| `type: object` with only `additionalProperties: {...}` | `Record<string, T>`                                                              |
+| `type: object` with no properties, `{}`                | `Record<string, unknown>` / `unknown`: the spec gives no shape                   |
+| Response with no body (204)                            | `undefined`, as the runtime returns                                              |
+| Non-JSON response (HTML, binary)                       | the body's own schema, usually `string` (the runtime returns text)               |
+
+A remaining `unknown` in generated types means the spec doesn't describe that value; fix it in the
+backend's spec rather than in the generated file.
+
 ## Custom output
 
 `framework` can point to a JS module (resolved relative to the config file) whose factory receives

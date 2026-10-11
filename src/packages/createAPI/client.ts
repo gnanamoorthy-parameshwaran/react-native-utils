@@ -117,6 +117,20 @@ export default function createAPI({
         return entry.data as T;
     }
 
+    /**
+     * Stores a result, first dropping every expired entry so data nobody reads
+     * again doesn't stay in memory. A result with no `ttl` is never stored,
+     * since it would already count as expired.
+     */
+    function writeCache({hash, queryKey, data, ttl}: {hash: string; queryKey: QueryKey; data: unknown; ttl: number}): void {
+        const now = Date.now();
+        cache.forEach((entry, key) => {
+            if (entry.expiresAt <= now) cache.delete(key);
+        });
+
+        if (ttl > 0) cache.set(hash, {queryKey, data, expiresAt: now + ttl});
+    }
+
     function useQuery<T>({
         queryKey,
         queryFn,
@@ -184,7 +198,7 @@ export default function createAPI({
                 if (!running) {
                     const promise = fn({request: options => send(options, emit)})
                         .then(data => {
-                            if (inflight.get(hash)?.promise === promise) cache.set(hash, {queryKey: key, data, expiresAt: Date.now() + entryTtl});
+                            if (inflight.get(hash)?.promise === promise) writeCache({hash, queryKey: key, data, ttl: entryTtl});
                             return data;
                         })
                         .finally(() => {

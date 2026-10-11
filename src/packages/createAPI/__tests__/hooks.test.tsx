@@ -2,6 +2,7 @@ import React from 'react';
 import {act, renderHook, waitFor} from '@testing-library/react-native';
 
 import createAPI from '../client';
+import {hashKey} from '../util';
 
 import type {UseFocusEffect} from '../types';
 
@@ -140,6 +141,32 @@ describe('useQuery', () => {
 
         await act(() => invalidateQueries(['posts']));
         expect(queryFn).toHaveBeenCalledTimes(2);
+    });
+
+    it('drops expired entries from memory on the next write, and never stores results without a ttl', async () => {
+        const {useQuery} = createAPI({baseURL: 'https://example.test'});
+        const deleteSpy = jest.spyOn(Map.prototype, 'delete');
+        const setSpy = jest.spyOn(Map.prototype, 'set');
+        const cacheWrites = () =>
+            setSpy.mock.calls.filter(([, value]) => typeof value === 'object' && value !== null && 'expiresAt' in value).map(([key]) => key);
+
+        const old = renderHook(() => useQuery({queryKey: ['old'], queryFn: async () => 'old', ttl: 10}));
+        await waitFor(() => expect(old.result.current.data).toBe('old'));
+        old.unmount();
+        expect(cacheWrites()).toContain(hashKey(['old']));
+
+        await act(() => new Promise<void>(resolve => setTimeout(resolve, 20)));
+        deleteSpy.mockClear();
+        const fresh = renderHook(() => useQuery({queryKey: ['fresh'], queryFn: async () => 'fresh', ttl: 60_000}));
+        await waitFor(() => expect(fresh.result.current.data).toBe('fresh'));
+        expect(deleteSpy).toHaveBeenCalledWith(hashKey(['old']));
+
+        const uncached = renderHook(() => useQuery({queryKey: ['uncached'], queryFn: async () => 'uncached', ttl: 0}));
+        await waitFor(() => expect(uncached.result.current.data).toBe('uncached'));
+        expect(cacheWrites()).not.toContain(hashKey(['uncached']));
+
+        deleteSpy.mockRestore();
+        setSpy.mockRestore();
     });
 
     it('calls onSuccess and onError', async () => {

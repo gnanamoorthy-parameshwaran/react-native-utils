@@ -12,7 +12,7 @@ Managing server data well means solving the problems below. This is where `useQu
 | Knowing when data is "out of date" | Partial | A per-query `ttl`, explicit `invalidateQueries`, and a refetch on screen focus once expired (when `useFocusEffect` is passed to `createAPI`). There is no separate "stale" time before expiry and no refetch on network reconnect. |
 | Reflecting updates to data as quickly as possible | Partial | `invalidateQueries` refetches every visible query with a matching key at once. A single component's `refetch()` doesn't update other components showing the same key, and the cache can't be written directly (no `setQueryData` or optimistic updates). |
 | Performance optimizations like pagination and lazy loading data | Partial | Page-number pagination with `keepPreviousData`, and lazy loading with `enabled`. Append-as-you-scroll lists (`useInfiniteQuery`) are not available yet. |
-| Managing memory and garbage collection of server state | Not covered | Expired entries are removed only when their key is read again or invalidated; entries that are never revisited stay in memory until the app restarts. |
+| Managing memory and garbage collection of server state | Covered | Every cache write first drops all expired entries, and results with no `ttl` are never stored, so memory holds only data fetched within its TTL. There is no separate cache-size cap or post-unmount grace period (`gcTime`). |
 | Memoizing query results with structural sharing | Not covered | Each fetch returns a new object, so components re-render with every result even if the data is unchanged. |
 
 Most screens in our apps talk to the backend in the same way: a raw `fetch` call, a `useState` for

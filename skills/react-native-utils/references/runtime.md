@@ -87,8 +87,9 @@ matching queries that are mounted, enabled and focused refetch.
 
 ## Behaviour (for debugging)
 
-- The cache is a flat `Map<hashKey(queryKey), {queryKey, data, expiresAt}>`, in memory only. An
-  expired entry is dropped when read.
+- The cache is a flat `Map<hashKey(queryKey), {queryKey, data, expiresAt}>`, in memory only. Every
+  write first drops all expired entries (and an expired entry is also dropped when read); results
+  with `ttl` 0 are never stored.
 - Components on the same key share one in-flight request (`inflight` map). Invalidation drops
   matching in-flight requests, so a refetch after a mutation always sends a new request.
 - A response is ignored by a component if it unmounted, its key changed, or a newer fetch started.

@@ -219,3 +219,6 @@ export function replaceEqualDeep<T>(previous: unknown, next: T): T {
 
     return (previousKeys.length === nextKeys.length && unchanged === previousKeys.length ? previous : merged) as T;
 }
+
+/** Stand-in when no focus hook is passed to `createAPI`, so `useQuery` calls the same hooks every render. */
+export function noFocusEffect(): void {}

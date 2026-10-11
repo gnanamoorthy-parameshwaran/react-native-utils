@@ -2,22 +2,21 @@ import React from 'react';
 import {AppState} from 'react-native';
 
 import APIContext from './context/APIContext';
-import {hashKey, matchKey, parseResponseBody, replaceEqualDeep, validateAndThrowExceptions} from './util';
+import {hashKey, matchKey, noFocusEffect, parseResponseBody, replaceEqualDeep, validateAndThrowExceptions} from './util';
 
-import type {CreateAPIProps, EmitEvent, FetchProps, QueryKey, RequestBody, Retry, UseQueryOptions, UseQueryResult} from './types';
-
-type CacheEntry = {queryKey: QueryKey; data: unknown; staleAt: number; expiresAt: number};
-type MountedQuery = {
-    queryKey: QueryKey;
-    isEnabled: () => boolean;
-    isFocused: () => boolean;
-    refetch: () => Promise<void>;
-    revalidate: () => Promise<void>;
-};
-type QueryState<T> = {hash: string; data: T | undefined; error: unknown; isFetching: boolean; isPlaceholderData: boolean};
-
-/** Stand-in when no focus hook is passed to `createAPI`, so `useQuery` calls the same hooks every render. */
-function noFocusEffect(): void {}
+import type {
+    CacheEntry,
+    CreateAPIProps,
+    EmitEvent,
+    FetchProps,
+    MountedQuery,
+    QueryKey,
+    QueryState,
+    RequestBody,
+    Retry,
+    UseQueryOptions,
+    UseQueryResult,
+} from './types';
 
 /** Default for how long unused query data stays in memory: 5 minutes. */
 const DEFAULT_CACHE_TIME = 5 * 60 * 1000;

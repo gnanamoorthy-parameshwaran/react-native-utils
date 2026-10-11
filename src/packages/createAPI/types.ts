@@ -93,3 +93,18 @@ export type UseQueryResult<T> = {
     /** Fetches again, ignoring the cache. */
     refetch: () => Promise<void>;
 };
+
+/** A cached query result: fresh until `staleAt`, kept (and shown while revalidating) until `expiresAt`. */
+export type CacheEntry = {queryKey: QueryKey; data: unknown; staleAt: number; expiresAt: number};
+
+/** A `useQuery` instance on screen, as seen by invalidation and the app-foreground/reconnect listeners. */
+export type MountedQuery = {
+    queryKey: QueryKey;
+    isEnabled: () => boolean;
+    isFocused: () => boolean;
+    refetch: () => Promise<void>;
+    revalidate: () => Promise<void>;
+};
+
+/** One `useQuery` instance's state for the key it currently shows. */
+export type QueryState<T> = {hash: string; data: T | undefined; error: unknown; isFetching: boolean; isPlaceholderData: boolean};

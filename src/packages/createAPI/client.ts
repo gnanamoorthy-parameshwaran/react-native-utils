@@ -95,14 +95,19 @@ export default function createAPI({
         const {emitEvent} = React.useContext(APIContext);
         const [loading, setLoading] = React.useState<boolean>(loadInitially);
 
-        const request = async <T>(options: FetchProps<T>): Promise<T> => {
+        const emitEventRef = React.useRef(emitEvent);
+        React.useEffect(() => {
+            emitEventRef.current = emitEvent;
+        }, [emitEvent]);
+
+        const request = React.useCallback(async <T>(options: FetchProps<T>): Promise<T> => {
             setLoading(true);
             try {
-                return await send(options, emitEvent);
+                return await send(options, (...args) => emitEventRef.current(...args));
             } finally {
                 setLoading(false);
             }
-        };
+        }, []);
 
         return {loading, request};
     }

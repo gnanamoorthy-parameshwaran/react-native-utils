@@ -1,5 +1,21 @@
 # Changelog
 
+# [2.1.0](https://github.com/gnanamoorthy-parameshwaran/react-native-utils/compare/v2.0.1...v2.1.0) (2026-10-16)
+
+
+### Features
+
+* **ArrayUtils:** add Laravel Arr helpers ([caa0365](https://github.com/gnanamoorthy-parameshwaran/react-native-utils/commit/caa03659d320aada5c316e48a694725c8fce252d))
+* **DateUtils:** add Carbon-style dates, intervals, periods and time zones ([e6486b1](https://github.com/gnanamoorthy-parameshwaran/react-native-utils/commit/e6486b19364aa66c826ec820887021a7f7e8d169))
+* **NumberUtils:** add Laravel Number helpers ([280fcdb](https://github.com/gnanamoorthy-parameshwaran/react-native-utils/commit/280fcdb6836e10ddfc14e4f8de796fdcb401ec86))
+* **StringUtils:** add Laravel Str helpers ([23489b0](https://github.com/gnanamoorthy-parameshwaran/react-native-utils/commit/23489b0318fe4913ee95a611d78548bc3fd3883c))
+* **theme:** add ThemeProvider, useTheme and Material Design 3 themes ([26ac90a](https://github.com/gnanamoorthy-parameshwaran/react-native-utils/commit/26ac90a80f8cadbfd24618a7c36d5c20d0b91c67))
+
+
+### Performance Improvements
+
+* **createAPI:** keep useAPI request stable across renders ([ac3d7c9](https://github.com/gnanamoorthy-parameshwaran/react-native-utils/commit/ac3d7c9669cab6a2707413d58d66bcf367bde2f8))
+
 ## [2.0.1](https://github.com/gnanamoorthy-parameshwaran/react-native-utils/compare/v2.0.0...v2.0.1) (2026-10-11)
 
 

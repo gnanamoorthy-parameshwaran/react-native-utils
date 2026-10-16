@@ -1,19 +1,14 @@
 import React from 'react';
 import {TextInput} from 'react-native';
-import * as ImagePicker from 'expo-image-picker';
-import {Picker} from '@react-native-picker/picker';
-import {getDocumentAsync} from 'expo-document-picker';
-import {TextInput as PaperTextInput} from 'react-native-paper';
 
 import StringUtils from '../utils/StringUtils';
 import ValidationUtils from '../utils/ValidationUtils';
 
 import type {Rule} from '../utils/ValidationUtils';
-import type {DocumentPickerOptions} from 'expo-document-picker';
 
 type Rules<T> = {[K in keyof T]: Rule[]};
 type FormErrors<T> = {[K in keyof T]: string | null};
-type FormRefTypes = React.ComponentRef<typeof TextInput> | React.ComponentRef<typeof PaperTextInput> | React.ComponentRef<typeof Picker> | null;
+type FormRefTypes = React.ComponentRef<typeof TextInput> | null;
 type FormRefs<T> = {[K in keyof T]: FormRefTypes};
 type ExtractFieldRules<R extends Rule[]> = R[number];
 type Messages<T> = {[K in keyof T]?: Partial<{[R in ExtractFieldRules<Rules<T>[K]>]: string}>};
@@ -111,34 +106,6 @@ export default function useForm<T extends Record<string, any>>({rules, initialFi
         if (isValid.every(item => item)) OnSubmit();
     };
 
-    /**
-     * Method that picks a document from the device
-     * @param field The field to update with the picked document
-     * @param pickOptions Options for the document picker
-     */
-    const PickDocument = (field: keyof T, pickOptions: DocumentPickerOptions) => {
-        getDocumentAsync(pickOptions).then(document => {
-            const asset = document.assets?.[0];
-            if (asset) {
-                setFields(prev => ({...prev, [field]: {uri: asset.uri, type: asset.mimeType, name: asset.name}}));
-            }
-        });
-    };
-
-    /**
-     * Method that picks an image from the device
-     * @param field The field to update with the picked image
-     * @param options Options for the image picker
-     */
-    const PickImage = (field: keyof T, options: ImagePicker.ImagePickerOptions) => {
-        ImagePicker.launchImageLibraryAsync(options).then(document => {
-            const asset = document.assets?.[0];
-            if (!document.canceled && asset) {
-                setFields(prev => ({...prev, [field]: {uri: asset.uri, type: asset.mimeType, name: asset.fileName ?? 'image.jpg'}}));
-            }
-        });
-    };
-
     React.useEffect(() => setFields(prev => ({...prev, ...initialFields})), [initialFields]);
 
     return {
@@ -146,8 +113,6 @@ export default function useForm<T extends Record<string, any>>({rules, initialFi
         fields,
         errors,
         setRef,
-        PickImage,
-        PickDocument,
         ValidateField,
         HandleSubmit,
         HandleFieldChange,

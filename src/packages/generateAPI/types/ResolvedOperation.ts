@@ -3,7 +3,8 @@ import type {Info, Schema} from './OpenAPISpec.ts';
 export const HTTP_METHODS = ['get', 'post', 'put', 'patch', 'delete'] as const;
 export type HttpMethodKey = (typeof HTTP_METHODS)[number];
 
-export type ResolvedParam = {name: string; type: string; description?: string};
+/** `refs` are the component schemas `type` names (e.g. `DatePeriod`), so client files can import them. */
+export type ResolvedParam = {name: string; type: string; refs: Set<string>; description?: string};
 export type ResolvedQueryParam = ResolvedParam & {required: boolean};
 
 export type ResolvedRequestBody = {

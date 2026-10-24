@@ -92,3 +92,38 @@ describe('generated clients stay free of caching', () => {
         expect(content).toMatch(/return \{ gettingBusinessUnits, getBusinessUnits, gettingBusinessUnit, getBusinessUnit, gettingGoals, getGoals \};/);
     });
 });
+
+describe('params typed by a shared schema', () => {
+    const refSpec = {
+        openapi: '3.1.0',
+        info: {title: 'Test', version: '1.0.0'},
+        paths: {
+            '/v1/customers/{customer}/orders': {
+                get: {
+                    operationId: 'V1.Customer.Order.getOrders',
+                    responses: {},
+                    parameters: [
+                        {name: 'customer', in: 'path', required: true, schema: {type: 'integer'}},
+                        {name: 'period', in: 'query', required: false, schema: {$ref: '#/components/schemas/DatePeriod'}},
+                        {name: 'status', in: 'query', required: false, schema: {$ref: '#/components/schemas/OrderStatus'}},
+                    ],
+                },
+            },
+        },
+        components: {
+            schemas: {
+                DatePeriod: {type: 'string', enum: ['today', 'this_month', 'this_year']},
+                OrderStatus: {type: 'string', enum: ['pending', 'completed']},
+            },
+        },
+    } as unknown as OpenAPI;
+
+    const parsed = new OperationParser(refSpec).parse();
+    const file = new ReactClientGenerator(parsed, config).generate().find(f => f.name === 'useOrder.ts');
+
+    it('imports the schemas named in the method signature', () => {
+        expect(file?.content).toContain('period?: DatePeriod');
+        expect(file?.content).toMatch(/import type \{ DatePeriod \} from '[^']*\/DatePeriod';/);
+        expect(file?.content).toMatch(/import type \{ OrderStatus \} from '[^']*\/OrderStatus';/);
+    });
+});

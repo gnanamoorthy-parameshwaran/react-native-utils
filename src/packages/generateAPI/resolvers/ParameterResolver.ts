@@ -14,20 +14,17 @@ export default class ParameterResolver {
 
         const pathParams: ResolvedParam[] = parameters
             .filter(param => param.in === 'path')
-            .map(param => ({
-                name: param.name,
-                type: this.typeResolver.resolve(param.schema).text,
-                description: param.description,
-            }));
+            .map(param => {
+                const {text, refs} = this.typeResolver.resolve(param.schema);
+                return {name: param.name, type: text, refs, description: param.description};
+            });
 
         const queryParams: ResolvedQueryParam[] = parameters
             .filter(param => param.in === 'query')
-            .map(param => ({
-                name: param.name,
-                type: this.typeResolver.resolve(param.schema).text,
-                description: param.description,
-                required: !!param.required,
-            }));
+            .map(param => {
+                const {text, refs} = this.typeResolver.resolve(param.schema);
+                return {name: param.name, type: text, refs, description: param.description, required: !!param.required};
+            });
 
         return {pathParams, queryParams};
     }

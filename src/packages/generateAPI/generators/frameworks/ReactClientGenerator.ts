@@ -244,6 +244,13 @@ export default class ReactClientGenerator implements FrameworkGenerator {
             const bodyGroup = operation.requestBody.inlineType ? operation.resource : this.parsed.schemaGroups.get(bodyType);
             if (bodyGroup) typeRefs.push({name: bodyType, group: bodyGroup});
         }
+        // Params typed by a shared schema (e.g. `period: DatePeriod`) name it in the method signature, so it needs importing too
+        [...operation.hookParams, ...operation.methodParams, ...operation.queryParams].forEach(param => {
+            param.refs.forEach(name => {
+                const group = this.parsed.schemaGroups.get(name);
+                if (group) typeRefs.push({name, group});
+            });
+        });
 
         return {
             hookLine,

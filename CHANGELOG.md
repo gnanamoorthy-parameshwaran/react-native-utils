@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.1.1](https://github.com/gnanamoorthy-parameshwaran/react-native-utils/compare/v2.1.0...v2.1.1) (2026-10-24)
+
+
+### Bug Fixes
+
+* **generateAPI:** import shared schemas used by path and query params ([08a4cf8](https://github.com/gnanamoorthy-parameshwaran/react-native-utils/commit/08a4cf863fa7220a6ec3a6e3689fa6c6763a78dd))
+
 # [2.1.0](https://github.com/gnanamoorthy-parameshwaran/react-native-utils/compare/v2.0.1...v2.1.0) (2026-10-16)
 
 
